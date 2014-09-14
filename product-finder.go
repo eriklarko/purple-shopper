@@ -1,7 +1,7 @@
 package main
 
 import (
-  "fmt"
+  "strconv"
   "log"
   "net/url"
   "errors"
@@ -15,22 +15,37 @@ type ProductUrls struct {
 }
 
 func findProductsOnRandomSearchpage() []*ProductUrls {
+	page := 0
 	keyword := getRandomSearchKeyword()
 
-	// TODO: This URL only show books :)
-	// TODO: Use http://www.amazon.com/s/search-alias%3D[CATEGORY]&field-keywords=[KEYWORDS]
-	url := "http://www.amazon.com/s/field-keywords=" + keyword;
-	fmt.Println("Finding products on " + url)
+	var products []*ProductUrls
+	shouldContinue := true
+	for shouldContinue {
+		page = page + 1
+		// TODO: This URL only show books :)
+		// TODO: Use http://www.amazon.com/s/search-alias%3D[CATEGORY]&field-keywords=[KEYWORDS]
+		url := "http://www.amazon.com/s/field-keywords=" + keyword + "&page=" + strconv.Itoa(page);
+		newProducts := findProductsOnSearchPageUrl(url)
+
+		products = append(products, newProducts...)
+		shouldContinue = len(newProducts) >= 10
+	}
+
+	return products
+}
+
+func getRandomSearchKeyword() string {
+	return generateRandomSearchString()
+}
+
+func findProductsOnSearchPageUrl(url string) []*ProductUrls {
+	log.Println("Finding products on " + url)
 	doc, error := goquery.NewDocument(url)
 	if error != nil {
 		log.Fatal(error)
 	}
 
 	return findProductsOnSearchPage(doc)
-}
-
-func getRandomSearchKeyword() string {
-	return generateRandomSearchString()
 }
 
 func findProductsOnSearchPage(doc *goquery.Document) []*ProductUrls {
@@ -43,6 +58,7 @@ func findProductsOnSearchPage(doc *goquery.Document) []*ProductUrls {
 			log.Println(error)
 		}
 	})
+
 	return products
 }
 
