@@ -2,7 +2,7 @@ package main
 
 import (
     "image"
-    "image/color"
+	"image/color"
     "math"
     "log"
 )
@@ -18,7 +18,7 @@ var MAX_DISTANCE float64 = 255 * math.Sqrt(3)
 
 func distance(image image.Image, targetColor color.RGBA) float64 {
 	meanColor := findMeanColor(image)
-	return distanceBetweenColors(meanColor, targetColor)
+	return DistanceBetweenColors(meanColor, targetColor)
 }
 
 func findMeanColor(image image.Image) color.RGBA {
@@ -49,7 +49,7 @@ func l (c uint32) uint32 {
 	return uint32(uint8(c))
 }
 
-func distanceBetweenColors(color1, color2 color.RGBA) float64 {
+func DistanceBetweenColors(color1, color2 color.RGBA) float64 {
 	r1, g1, b1, _ := color1.RGBA()
 	r2, g2, b2, _ := color2.RGBA()
 

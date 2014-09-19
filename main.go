@@ -14,22 +14,24 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"image"
-	"image/jpeg"
-	"image/png"
-	"image/color"
-	"errors"
 )
 
 type Product struct {
 	Urls  *ProductUrls
-	Image *os.File
+	Image string
 }
 
+type Ranker func ([]*Product, *Product, *os.File) int
+
 func main() {
+	ranker := RankProductBasedOnAmountOfPurpleInImage
+
 	// TODO: Make multiple parallel calls to the findRandom thingie
 	// TODO: Limit products on price and availability
-	productUrls := findProductsOnRandomSearchpage()
+	var productUrls []*ProductUrls
+	for i := 0; i < 5; i++ {
+		productUrls = append(productUrls, findProductsOnRandomSearchpage()...)
+	}
 	if len(productUrls) == 0 {
 		log.Fatal("No products found!")
 	}
@@ -40,7 +42,7 @@ func main() {
 		log.Fatal("No images downloaded!")
 	}
 
-	highestRankedProduct := findHighestRankedProduct(products, 350)
+	highestRankedProduct := findHighestRankedProduct(ranker, products)
 	if highestRankedProduct == nil {
 		fmt.Println("Did not find a good enough product :(")
 	} else {
@@ -49,8 +51,10 @@ func main() {
 }
 
 func downloadImages(productUrls []*ProductUrls) []*Product {
+	log.Printf("Downloading %d images...\n", len(productUrls))
 	var products []*Product
-	for _, urls := range productUrls {
+	for i, urls := range productUrls {
+		log.Printf("Downloading image %d\n", i+1)
 		imageFile, error := downloadImage(urls.ImageUrl)
 		if error == nil {
 			products = append(products, &Product{urls, imageFile})
@@ -58,35 +62,35 @@ func downloadImages(productUrls []*ProductUrls) []*Product {
 			log.Println(error)
 		}
 	}
-
+	log.Println("... done")
 	return products
 }
 
-func downloadImage(url *url.URL) (*os.File, error) {
+func downloadImage(url *url.URL) (string, error) {
 	res, err := http.Get(url.String())
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	data, err := ioutil.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	file, err := os.Create("image_" + getImageName(url))
+	defer file.Close()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	_, err = file.Write(data)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-
 	file.Sync()
-	log.Printf("Downloaded %s to %s\n", url.String(), file.Name())
-	return file, nil
+	//log.Printf("Downloaded %s to %s\n", url.String(), file.Name())
+	return file.Name(), nil
 }
 
 func getImageName(url *url.URL) string {
@@ -96,68 +100,43 @@ func getImageName(url *url.URL) string {
 	return urlString[slashIndex + 1:]
 }
 
-func findHighestRankedProduct(products []*Product, rankThreshold int) *Product {
-	highestRank := rankThreshold
+func findHighestRankedProduct(ranker Ranker, products []*Product) *Product {
+	log.Printf("Analyzing %d images...\n", len(products))
+	highestRank := 0
 	var highestRankedProduct *Product = nil
-	for _, product := range products {
-		productRank := rankProduct(products, product)
+	for i, product := range products {
+		log.Printf("Analyzing image %d\n", i+1)
+
+		imageFile, error := os.Open(product.Image)
+		if error != nil {
+			imageFile.Close()
+			log.Printf("Unable to open file for %v. %v\n", product.Urls.Url, error)
+			continue
+		}
+
+		productRank := ranker(products, product, imageFile)
+		imageFile.Close()
 		if productRank > highestRank {
 			highestRank = productRank
 			highestRankedProduct = product
 		}
 	}
 
+	if highestRankedProduct != nil {
+		log.Printf("I found %v which ranked at %d!", highestRankedProduct.Urls.Url, highestRank)
+	}
+
+	log.Println("... done!")
 	return highestRankedProduct
 }
 
-func rankProduct(products []*Product, product *Product) int {
-	// Here is where the algorithm to choose product is implemented
-	rank, error := findAmountOfPurpleInImage(product.Image)
-	if error == nil {
-		log.Printf("Rank: %d\n", rank)
-		return rank
-	} else {
-		log.Printf("Unable to find rank. %v\n", error)
-		return -1
-	}
-}
-
-func findAmountOfPurpleInImage(imageFile *os.File) (int, error) {
-	log.Println("Finding amount of purple in " + imageFile.Name())
-	image, error := fileToImage(imageFile)
-	if error != nil {
-		return 0, error
-	}
-
-	purple := color.RGBA{0x66, 0x50, 0x88, 0xFF} // #665088
-	distanceToPurple := distance(image, purple)
-	log.Printf("Distance to %s: %d\n", purple, distanceToPurple)
-
-	// The distance should be as small as possible, but the rank should be as high as possible
-	return int(MAX_DISTANCE - distanceToPurple), nil
-}
-
-// TODO: Doesn't really work... :(
-func fileToImage(file *os.File) (image.Image, error) {
-	if strings.HasSuffix(file.Name(), "jpg") || strings.HasSuffix(file.Name(), "jpeg") {
-		return jpeg.Decode(file)
-	} else if strings.HasSuffix(file.Name(), "png") {
-		return png.Decode(file)
-	}
-
-	return nil, errors.New("I don't know the format of " + file.Name())
-}
-
 func buyProduct(product *Product) {
-	fmt.Printf("I AM GONNA BUY %s\n", product)
+	fmt.Printf("I AM GONNA BUY %v\n", product.Urls.Url)
 }
 
 func cleanUp(products []*Product) {
 	for _, product := range products {
-		err := os.Remove(product.Image.Name())
-		if err != nil {
-			log.Println(err)
-		}
+		os.Remove(product.Image)
 	}
 	log.Printf("Removed %d images\n", len(products))
 }

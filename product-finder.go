@@ -28,7 +28,7 @@ func findProductsOnRandomSearchpage() []*ProductUrls {
 		newProducts := findProductsOnSearchPageUrl(url)
 
 		products = append(products, newProducts...)
-		shouldContinue = len(newProducts) >= 10
+		shouldContinue = len(newProducts) >= 10 && len(products) < 1000
 	}
 
 	return products

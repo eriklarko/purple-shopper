@@ -16,16 +16,11 @@ func generateRandomSearchString() string {
 		setupWordsDatabase()
 	}
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	word := strings.ToLower(words[r.Intn(len(words))])
-
-	if r.Float64() < 0.3 {
-		word += " " + generateRandomSearchString()
-	}
-	return word
+	return strings.ToLower(words[r.Intn(len(words))])
 }
 
 func setupWordsDatabase() {
-	lines, err := readLines("TWL06.txt")
+	lines, err := readLines("CommonWords.txt")
 	if err != nil {
 		log.Println("Unable to open word database")
 		log.Fatal(err)
