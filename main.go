@@ -1,10 +1,9 @@
 package main
 
 /*
-   TODO: Don't buy clothes
-   TODO: Don't buy books
-   TODO: Don't buy apps
-   TODO: Don't buy sex toys
+   TODO: Store which products have been bought so that we don't accidentally buy them again
+   TODO: Don't suggest products that aren't available
+   TODO: Don't suggest products where you have to eg. select size before the product can be added to the cart
 */
 import (
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 type Product struct {
@@ -21,49 +21,72 @@ type Product struct {
 	Image string
 }
 
-type Ranker func ([]*Product, *Product, *os.File) int
+type RankedProduct struct {
+	product *Product
+	rank int
+}
+
+// Sadly, the ranker is responsible for closing and removing the file
+type Ranker func (*Product, chan<- *RankedProduct)
 
 func main() {
+	start := time.Now()
+	log.Println("Starting concurrent Purple Shopper")
 	ranker := RankProductBasedOnAmountOfPurpleInImage
 
-	// TODO: Make multiple parallel calls to the findRandom thingie
-	// TODO: Limit products on price and availability
-	var productUrls []*ProductUrls
-	for i := 0; i < 5; i++ {
-		productUrls = append(productUrls, findProductsOnRandomSearchpage()...)
-	}
-	if len(productUrls) == 0 {
-		log.Fatal("No products found!")
+	toDownloadChannel := make(chan *ProductUrls, 10000)
+	toAnalyzeChannel := make(chan *Product, 10000)
+	analyzedChannel := make(chan *RankedProduct, 10000)
+
+
+	for {
+		go findProductsOnRandomSearchPage(toDownloadChannel)
+		go downloadImages(toDownloadChannel, toAnalyzeChannel)
+		go rankProducts(ranker, toAnalyzeChannel, analyzedChannel)
+
+		highestRankedProduct := findHighestRankedProduct(analyzedChannel)
+		if highestRankedProduct == nil {
+			log.Println("Did not find a good enough product :(")
+		} else {
+			buyProduct(highestRankedProduct)
+			break
+		}
 	}
 
-	products := downloadImages(productUrls)
-	defer cleanUp(products)
-	if len(products) == 0 {
-		log.Fatal("No images downloaded!")
-	}
+	elapsed := time.Since(start)
+	log.Printf("Running time %s", elapsed)
+}
 
-	highestRankedProduct := findHighestRankedProduct(ranker, products)
-	if highestRankedProduct == nil {
-		fmt.Println("Did not find a good enough product :(")
-	} else {
-		buyProduct(highestRankedProduct)
+func downloadImages(toDownloadChannel <-chan *ProductUrls, toAnalyzeChannel chan<- *Product) {
+	moarMessages := true
+	for moarMessages {
+		select {
+		case toDownload := <-toDownloadChannel:
+			if toDownload == nil {
+				toAnalyzeChannel <- nil
+				log.Println("Finished downloading images")
+				moarMessages = false
+				break
+			}
+
+			// TODO: This should be in it's on goroutine
+			product, error := downloadProductImage(toDownload)
+			//log.Printf("Downloaded %v\n", product.Urls.ImageUrl)
+			if error == nil {
+				toAnalyzeChannel <- product
+			}
+		}
 	}
 }
 
-func downloadImages(productUrls []*ProductUrls) []*Product {
-	log.Printf("Downloading %d images...\n", len(productUrls))
-	var products []*Product
-	for i, urls := range productUrls {
-		log.Printf("Downloading image %d\n", i+1)
-		imageFile, error := downloadImage(urls.ImageUrl)
-		if error == nil {
-			products = append(products, &Product{urls, imageFile})
-		} else {
-			log.Println(error)
-		}
+func downloadProductImage(urls *ProductUrls) (*Product, error) {
+	imageFile, error := downloadImage(urls.ImageUrl)
+	if error == nil {
+		return &Product{urls, imageFile}, nil
+	} else {
+		log.Println(error)
+		return nil, error
 	}
-	log.Println("... done")
-	return products
 }
 
 func downloadImage(url *url.URL) (string, error) {
@@ -100,25 +123,43 @@ func getImageName(url *url.URL) string {
 	return urlString[slashIndex + 1:]
 }
 
-func findHighestRankedProduct(ranker Ranker, products []*Product) *Product {
-	log.Printf("Analyzing %d images...\n", len(products))
+func rankProducts(ranker Ranker, toAnalyzeChannel <-chan *Product, analyzedChannel chan<- *RankedProduct) {
+	moarMessages := true
+	for moarMessages {
+		select {
+		case toAnalyze := <-toAnalyzeChannel:
+			if toAnalyze == nil {
+				analyzedChannel <- nil
+				log.Println("Finised ranking all products")
+				moarMessages = false
+				break
+			}
+
+			go ranker(toAnalyze, analyzedChannel)
+		}
+	}
+}
+
+func findHighestRankedProduct(analyzedChannel <-chan *RankedProduct) *Product {
 	highestRank := 0
 	var highestRankedProduct *Product = nil
-	for i, product := range products {
-		log.Printf("Analyzing image %d\n", i+1)
 
-		imageFile, error := os.Open(product.Image)
-		if error != nil {
-			imageFile.Close()
-			log.Printf("Unable to open file for %v. %v\n", product.Urls.Url, error)
-			continue
-		}
+	moarMessages := true
+	for moarMessages {
+		select {
+		case rankedProduct := <-analyzedChannel:
+			if rankedProduct == nil {
+				log.Println("No more rankings to process")
+				moarMessages = false
+				break
+			}
 
-		productRank := ranker(products, product, imageFile)
-		imageFile.Close()
-		if productRank > highestRank {
-			highestRank = productRank
-			highestRankedProduct = product
+			if rankedProduct.rank > highestRank {
+				highestRank = rankedProduct.rank
+				highestRankedProduct = rankedProduct.product
+
+				log.Printf("Found new top product! %v ranked at %d\n", highestRankedProduct.Urls.Url, highestRank)
+			}
 		}
 	}
 
@@ -126,7 +167,6 @@ func findHighestRankedProduct(ranker Ranker, products []*Product) *Product {
 		log.Printf("I found %v which ranked at %d!", highestRankedProduct.Urls.Url, highestRank)
 	}
 
-	log.Println("... done!")
 	return highestRankedProduct
 }
 

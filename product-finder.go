@@ -1,10 +1,13 @@
 package main
 
 import (
-  "strconv"
   "log"
   "net/url"
   "errors"
+  "strings"
+  "math/rand"
+  "time"
+  "fmt"
 
   "github.com/PuerkitoBio/goquery"
 )
@@ -14,52 +17,85 @@ type ProductUrls struct {
 	ImageUrl *url.URL
 }
 
-func findProductsOnRandomSearchpage() []*ProductUrls {
-	page := 0
-	keyword := getRandomSearchKeyword()
+func findProductsOnRandomSearchPage(c chan<- *ProductUrls) {
+	keyword := generateRandomSearchString()
+	category := getRandomCategory()
+	lowPrice := 0.0
+	highPrice := 100.0
 
-	var products []*ProductUrls
+	baseUrl := fmt.Sprintf("http://www.amazon.com/s/search-alias%%3D%s&field-keywords=%s&low-price=%.2f&high-price=%.2f", category, keyword, lowPrice, highPrice)
+	log.Println("Doing an Amazon search for " + keyword + " in category " + category + ": " + baseUrl)
+
+	page := 0
 	shouldContinue := true
 	for shouldContinue {
 		page = page + 1
-		// TODO: This URL only show books :)
-		// TODO: Use http://www.amazon.com/s/search-alias%3D[CATEGORY]&field-keywords=[KEYWORDS]
-		url := "http://www.amazon.com/s/field-keywords=" + keyword + "&page=" + strconv.Itoa(page);
-		newProducts := findProductsOnSearchPageUrl(url)
 
-		products = append(products, newProducts...)
-		shouldContinue = len(newProducts) >= 10 && len(products) < 1000
+		// TODO: Log every 150 products or so
+		url := fmt.Sprintf("%s&page=%d", baseUrl, page)
+		numberOfNewProducts := findProductsOnSearchPageUrl(url, c)
+		shouldContinue = numberOfNewProducts >= 10
 	}
 
-	return products
+	c <- nil
 }
 
-func getRandomSearchKeyword() string {
-	return generateRandomSearchString()
+func getRandomCategory() string {
+	categories := []string {
+		"appliances",
+		"arts-crafts",
+		"automotive",
+		"baby-products",
+		"beauty",
+		"popular",
+		"mobile",
+		"collectibles",
+		"computers",
+		"electronics",
+		"grocery",
+		"hpc",
+		"garden",
+		"industrial",
+		"fashion-luggage",
+		"magazines",
+		"mi",
+		"office-products",
+		"lawngarden",
+		"pets",
+		"pantry",
+		"software",
+		"sporting",
+		"tools",
+		"toys-and-games",
+		"wine",
+	}
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return strings.ToLower(categories[r.Intn(len(categories))])
 }
 
-func findProductsOnSearchPageUrl(url string) []*ProductUrls {
-	log.Println("Finding products on " + url)
+func findProductsOnSearchPageUrl(url string, c chan<- *ProductUrls) int {
 	doc, error := goquery.NewDocument(url)
 	if error != nil {
 		log.Fatal(error)
 	}
 
-	return findProductsOnSearchPage(doc)
+	return findProductsOnSearchPage(doc, c)
 }
 
-func findProductsOnSearchPage(doc *goquery.Document) []*ProductUrls {
-	var products []*ProductUrls
+func findProductsOnSearchPage(doc *goquery.Document, c chan<- *ProductUrls) int {
+	numberOfProductsFound := 0
 	doc.Find(".productImage").Each(func (i int, image *goquery.Selection) {
 		product, error := extractProduct(image);
 		if error == nil {
-			products = append(products, &product)
+			numberOfProductsFound++
+			c <- &product
 		} else {
-			log.Println(error)
+			log.Printf("Unable to extract product from goquery selection: %v\n", error)
 		}
 	})
 
-	return products
+	return numberOfProductsFound
 }
 
 func extractProduct(s *goquery.Selection) (ProductUrls, error) {

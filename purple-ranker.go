@@ -11,21 +11,50 @@ import (
 	"os"
 	"log"
 	"fmt"
+	"time"
 )
 
 var purple color.RGBA = color.RGBA{0x80, 0x00, 0x80, 0xFF}
 var rankThreshold int = 370
 var percentageOfPixelsPerCluster float64 = 0.35
 var config Config = Config {5, 1000000, Euclidean, GetPointFromLargestVarianceCluster}
+var rankLogFile string = fmt.Sprintf("ranks-%s.txt", time.Now().Format("2006-01-02 15:04"))
 
-func RankProductBasedOnAmountOfPurpleInImage(products []*Product, product *Product, imageFile *os.File) int {
+func RankProductBasedOnAmountOfPurpleInImage(product *Product, c chan<- *RankedProduct) {
+	imageFile, error := os.Open(product.Image)
+	defer cleanUpFile(imageFile)
+
+	if error != nil {
+		log.Printf("Unable to find rank for %v. %v\n", product.Urls.Url, error)
+		return
+	}
+
 	rank, error := findAmountOfPurpleInImage(imageFile)
 	if error == nil {
-		//log.Printf("%v ranked at %d\n", product.Urls.Url, rank)
-		return rank
-	} else {
+		logRankInfo(product, rank)
+
+		if rank >= rankThreshold {
+			c <- &RankedProduct{product, rank}
+		}
+	} else if !strings.Contains(error.Error(), "few datapoints") {
 		log.Printf("Unable to find rank for %v. %v\n", product.Urls.Url, error)
-		return -1
+	}
+}
+
+func cleanUpFile(file *os.File) {
+	if file == nil {
+		log.Println("Tried to cleanup nil file")
+	} else {
+
+		err := os.Remove(file.Name())
+		if err != nil {
+			log.Printf("Unable to remove file %v: %v", file, err)
+		}
+
+		err = file.Close()
+		if err != nil {
+			log.Printf("Unable to close file %v: %v", file, err)
+		}
 	}
 }
 
@@ -44,16 +73,13 @@ func findAmountOfPurpleInImage(imageFile *os.File) (int, error) {
 	clusterQualities := CalculateClusterQuality(config, dominantColors)
 	index, _ := LaMaximum(clusterQualities, int(float64(len(points)) * percentageOfPixelsPerCluster))
 	if index < 0 {
-		return 0, errors.New("No cluster was large enough")
+		return -1, nil //errors.New("No cluster was large enough")
 	}
 	dominantColor := dominantColors[index]
 	distanceToPurple := DistanceBetweenColors(pointToColor(*dominantColor.center), purple)
 
 	// The distance should be as small as possible, but the rank should be as high as possible
 	rank := int(MAX_DISTANCE - distanceToPurple)
-	if rank < rankThreshold {
-		return 0, errors.New(fmt.Sprintf("Image not purple enough, was %d needed %d", rank, rankThreshold))
-	}
 	return rank, nil
 }
 
@@ -101,4 +127,25 @@ func pointToColor(point Point) color.RGBA {
 		0xFF,
 	}
 	return color
+}
+
+func logRankInfo(product *Product, rank int) {
+
+	var file *os.File;
+	var err error;
+
+	if _, err := os.Stat(rankLogFile); err == nil {
+		file, err = os.OpenFile(rankLogFile, os.O_APPEND|os.O_WRONLY, 0600)
+	} else {
+		file, err = os.Create(rankLogFile)
+	}
+
+	defer file.Close()
+	if err != nil {
+		log.Printf("Unable to persist rank. %v\n", err)
+	}
+	_, err = file.WriteString(fmt.Sprintf("%v ranked at %d\n", product.Urls.Url, rank))
+	if err != nil {
+		log.Printf("Unable to persist rank. %v\n", err)
+	}
 }
