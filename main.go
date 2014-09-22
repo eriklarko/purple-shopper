@@ -58,18 +58,14 @@ func main() {
 }
 
 func downloadImages(toDownloadChannel <-chan *ProductUrls, toAnalyzeChannel chan<- *Product) {
-	moarMessages := true
-	for moarMessages {
-		select {
-		case toDownload := <-toDownloadChannel:
-			if toDownload == nil {
-				toAnalyzeChannel <- nil
-				log.Println("Finished downloading images")
-				moarMessages = false
-				break
-			}
-
+	select {
+	case toDownload := <-toDownloadChannel:
+		if toDownload == nil {
+			toAnalyzeChannel <- nil
+			log.Println("Finished downloading images")
+		} else {
 			go downloadProductImage(toDownload, toAnalyzeChannel)
+			downloadImages(toDownloadChannel, toAnalyzeChannel)
 		}
 	}
 }
@@ -118,18 +114,14 @@ func getImageName(url *url.URL) string {
 }
 
 func rankProducts(ranker Ranker, toAnalyzeChannel <-chan *Product, analyzedChannel chan<- *RankedProduct) {
-	moarMessages := true
-	for moarMessages {
-		select {
-		case toAnalyze := <-toAnalyzeChannel:
-			if toAnalyze == nil {
-				analyzedChannel <- nil
-				log.Println("Finised ranking all products")
-				moarMessages = false
-				break
-			}
-
+	select {
+	case toAnalyze := <-toAnalyzeChannel:
+		if toAnalyze == nil {
+			analyzedChannel <- nil
+			log.Println("Finised ranking all products")
+		} else {
 			go ranker(toAnalyze, analyzedChannel)
+			rankProducts(ranker, toAnalyzeChannel, analyzedChannel)
 		}
 	}
 }
