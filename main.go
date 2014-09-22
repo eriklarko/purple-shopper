@@ -69,23 +69,18 @@ func downloadImages(toDownloadChannel <-chan *ProductUrls, toAnalyzeChannel chan
 				break
 			}
 
-			// TODO: This should be in it's on goroutine
-			product, error := downloadProductImage(toDownload)
-			//log.Printf("Downloaded %v\n", product.Urls.ImageUrl)
-			if error == nil {
-				toAnalyzeChannel <- product
-			}
+			go downloadProductImage(toDownload, toAnalyzeChannel)
 		}
 	}
 }
 
-func downloadProductImage(urls *ProductUrls) (*Product, error) {
+func downloadProductImage(urls *ProductUrls, toAnalyzeChannel chan<- *Product) {
 	imageFile, error := downloadImage(urls.ImageUrl)
 	if error == nil {
-		return &Product{urls, imageFile}, nil
+		product := &Product{urls, imageFile}
+		toAnalyzeChannel <- product
 	} else {
 		log.Println(error)
-		return nil, error
 	}
 }
 
@@ -112,7 +107,6 @@ func downloadImage(url *url.URL) (string, error) {
 		return "", err
 	}
 	file.Sync()
-	//log.Printf("Downloaded %s to %s\n", url.String(), file.Name())
 	return file.Name(), nil
 }
 
