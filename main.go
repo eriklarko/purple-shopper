@@ -40,7 +40,7 @@ func main() {
 
 
 	for {
-		go findProductsOnRandomSearchPage(toDownloadChannel)
+		go findProductsOnRandomSearchPage(0, 100, toDownloadChannel)
 		go downloadImages(toDownloadChannel, toAnalyzeChannel)
 		go rankProducts(ranker, toAnalyzeChannel, analyzedChannel)
 

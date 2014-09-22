@@ -17,26 +17,33 @@ type ProductUrls struct {
 	ImageUrl *url.URL
 }
 
-func findProductsOnRandomSearchPage(c chan<- *ProductUrls) {
+func findProductsOnRandomSearchPage(lowPrice, highPrice float64, c chan<- *ProductUrls) {
 	keyword := generateRandomSearchString()
 	category := getRandomCategory()
-	lowPrice := 0.0
-	highPrice := 100.0
 
 	baseUrl := fmt.Sprintf("http://www.amazon.com/s/search-alias%%3D%s&field-keywords=%s&low-price=%.2f&high-price=%.2f", category, keyword, lowPrice, highPrice)
 	log.Println("Doing an Amazon search for " + keyword + " in category " + category + ": " + baseUrl)
 
 	page := 0
+	numberOfProductsFound := 0
+	lastLoggedNumberOfProducts := 0
 	shouldContinue := true
 	for shouldContinue {
 		page = page + 1
 
-		// TODO: Log every 150 products or so
 		url := fmt.Sprintf("%s&page=%d", baseUrl, page)
 		numberOfNewProducts := findProductsOnSearchPageUrl(url, c)
 		shouldContinue = numberOfNewProducts >= 10
+
+
+		numberOfProductsFound += numberOfNewProducts
+		if numberOfProductsFound - lastLoggedNumberOfProducts >= 150 {
+			log.Printf("Found %d products\n", numberOfProductsFound)
+			lastLoggedNumberOfProducts = numberOfProductsFound
+		}
 	}
 
+	log.Printf("Found a total of %d products\n", numberOfProductsFound)
 	c <- nil
 }
 
