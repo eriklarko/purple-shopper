@@ -35,7 +35,6 @@ func findProductsOnRandomSearchPage(lowPrice, highPrice float64, c chan<- *Produ
 		numberOfNewProducts := findProductsOnSearchPageUrl(url, c)
 		shouldContinue = numberOfNewProducts >= 10
 
-
 		numberOfProductsFound += numberOfNewProducts
 		if numberOfProductsFound - lastLoggedNumberOfProducts >= 150 {
 			log.Printf("Found %d products\n", numberOfProductsFound)

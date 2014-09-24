@@ -29,13 +29,15 @@ type RankedProduct struct {
 // Sadly, the ranker is responsible for closing and removing the file
 type Ranker func (*Product, chan<- *RankedProduct)
 
+var boughtProducts []string = nil
+
 func main() {
 	start := time.Now()
 	log.Println("Starting concurrent Purple Shopper")
 	ranker := RankProductBasedOnAmountOfPurpleInImage
 
 	toDownloadChannel := make(chan *ProductUrls, 10000)
-	toAnalyzeChannel := make(chan *Product, 10000)
+	toAnalyzeChannel := make(chan *Product, 100)
 	analyzedChannel := make(chan *RankedProduct, 10000)
 
 
@@ -63,11 +65,33 @@ func downloadImages(toDownloadChannel <-chan *ProductUrls, toAnalyzeChannel chan
 		if toDownload == nil {
 			toAnalyzeChannel <- nil
 			log.Println("Finished downloading images")
-		} else {
+		} else if !productBoughtBefore(toDownload){
 			go downloadProductImage(toDownload, toAnalyzeChannel)
 			downloadImages(toDownloadChannel, toAnalyzeChannel)
 		}
 	}
+}
+
+func productBoughtBefore(urls *ProductUrls) bool {
+	if boughtProducts == nil {
+		lines, error := ReadLines("bought-products.txt")
+		if error == nil {
+			boughtProducts = lines
+		} else {
+			log.Fatal(error)
+		}
+	}
+
+	return stringInSlice(urls.Url.String(), boughtProducts);
+}
+
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
 }
 
 func downloadProductImage(urls *ProductUrls, toAnalyzeChannel chan<- *Product) {
