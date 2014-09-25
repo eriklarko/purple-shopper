@@ -1,7 +1,6 @@
 package main
 
 /*
-   TODO: Store which products have been bought so that we don't accidentally buy them again
    TODO: Don't suggest products that aren't available
    TODO: Don't suggest products where you have to eg. select size before the product can be added to the cart
 */
