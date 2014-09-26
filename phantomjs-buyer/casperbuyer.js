@@ -1,3 +1,5 @@
+// TODO: Don't have separate steps, just look for things like "Continue", "Proceed", "Place" etc and just press whatever's there.
+
 var stepNum = 0;
 var captureAllSteps = true;
 	
@@ -13,13 +15,11 @@ var casper = require('casper').create({
 	}
 });
 casper.userAgent('Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)');
-//phantom.cookiesEnabled = true;
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 
 var amazonLoginPage = 'https://www.amazon.com/ap/signin?_encoding=UTF8&openid.assoc_handle=usflex&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.mode=checkid_setup&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.ns.pape=http%3A%2F%2Fspecs.openid.net%2Fextensions%2Fpape%2F1.0&openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.com%2Fgp%2Fyourstore%2Fhome%3Fie%3DUTF8%26ref_%3Dnav_custrec_signin';
-//var amazonLoginPage = 'http://casperjs.org';
 var productUrls =  casper.cli.args;
 
 ////////////////////////////////////////////////////////////////////////
@@ -77,7 +77,12 @@ function placeOrder() {
 
 function logBoughtProducts() {
 	this.echo("Logging all products bought");
-	// TODO: Do this... :)
+
+	var toLog = "";
+	for (var i = 0; i < productUrls.length; i++) {
+		toLog += productUrls[i] + "\n";
+	}
+	fs.write("../bought-products.txt", toLog, 'w');
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -100,4 +105,3 @@ casper.then(placeOrder);
 casper.then(logBoughtProducts);
 
 casper.run();
-//casper.exit();
