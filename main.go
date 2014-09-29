@@ -1,11 +1,6 @@
 package main
 
-/*
-   TODO: Don't suggest products that aren't available
-   TODO: Don't suggest products where you have to eg. select size before the product can be added to the cart
-*/
 import (
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -13,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+	"os/exec"
+	"fmt"
 )
 
 type Product struct {
@@ -25,7 +22,6 @@ type RankedProduct struct {
 	rank int
 }
 
-// Sadly, the ranker is responsible for closing and removing the file
 type Ranker func (*Product, chan<- *RankedProduct)
 
 var boughtProducts []string = nil
@@ -38,18 +34,21 @@ func main() {
 	toDownloadChannel := make(chan *ProductUrls, 10000)
 	toAnalyzeChannel := make(chan *Product, 100)
 	analyzedChannel := make(chan *RankedProduct, 10000)
-
+	buyableChannel := make(chan *RankedProduct, 10000)
 
 	for {
 		go findProductsOnRandomSearchPage(0, 100, toDownloadChannel)
 		go downloadImages(toDownloadChannel, toAnalyzeChannel)
 		go rankProducts(ranker, toAnalyzeChannel, analyzedChannel)
+		go filterNonBuyableProducts(analyzedChannel, buyableChannel)
 
-		highestRankedProduct := findHighestRankedProduct(analyzedChannel)
+		highestRankedProduct := findHighestRankedProduct(buyableChannel)
 		if highestRankedProduct == nil {
 			log.Println("Did not find a good enough product :(")
 		} else {
-			buyProduct(highestRankedProduct)
+			var products []*Product
+			products = append(products, highestRankedProduct)
+			buyProducts(products)
 			break
 		}
 	}
@@ -149,23 +148,79 @@ func rankProducts(ranker Ranker, toAnalyzeChannel <-chan *Product, analyzedChann
 	}
 }
 
-func findHighestRankedProduct(analyzedChannel <-chan *RankedProduct) *Product {
+func filterNonBuyableProducts(analyzedChannel <-chan *RankedProduct, buyableChannel chan<- *RankedProduct) {
+	var buffer []*RankedProduct
+
+	moarMessages := true
+	for moarMessages {
+		select {
+		case toCheckForBuyability := <-analyzedChannel:
+			if toCheckForBuyability == nil {
+				buyableChannel <- nil
+				log.Println("Finised filtering non-buyable products")
+				moarMessages = false
+			} else {
+				buffer = append(buffer, toCheckForBuyability)
+			}
+
+			if len(buffer) >= 40 || !moarMessages {
+				log.Printf("Checking buyability of %d products\n", len(buffer))
+				numberOfBuyableProducts := putBuyableProductsOnChannel(buffer, buyableChannel)
+				log.Printf("Found a total of %d products\n", numberOfBuyableProducts)
+			}
+		}
+	}
+}
+
+func putBuyableProductsOnChannel(products []*RankedProduct, c chan<- *RankedProduct) int {
+	var urls []string
+	urlToProductMap := make(map[string]*RankedProduct)
+	for _, product := range products {
+		urls = append(urls, product.product.Urls.Url.String())
+		urlToProductMap[product.product.Urls.Url.String()] = product
+	}
+
+	cmd := BuildCasperScriptCommand("buyer/items-can-be-bought.js", urls)
+	rawOutput, err := cmd.Output()
+	if err != nil {
+		log.Printf("Failed to check %d products for buyability, %v\n", len(products), err)
+	}
+
+	unprocessedOutput := string(rawOutput);
+	lines := strings.Split(unprocessedOutput, "\n")
+	numberOfBuyableProducts := 0
+	for _, line := range lines {
+		lineParts := strings.Split(line, ";")
+		if len(lineParts) == 2 && lineParts[1] == "0" {
+
+			product, found := urlToProductMap[lineParts[0]]
+			if found {
+				numberOfBuyableProducts++
+				c <- product
+			}
+		}
+	}
+
+	return numberOfBuyableProducts
+}
+
+func findHighestRankedProduct(buyableChannel <-chan *RankedProduct) *Product {
 	highestRank := 0
 	var highestRankedProduct *Product = nil
 
 	moarMessages := true
 	for moarMessages {
 		select {
-		case rankedProduct := <-analyzedChannel:
-			if rankedProduct == nil {
+		case buyableRankedProduct := <-buyableChannel:
+			if buyableRankedProduct == nil {
 				log.Println("No more rankings to process")
 				moarMessages = false
 				break
 			}
 
-			if rankedProduct.rank > highestRank {
-				highestRank = rankedProduct.rank
-				highestRankedProduct = rankedProduct.product
+			if buyableRankedProduct.rank > highestRank {
+				highestRank = buyableRankedProduct.rank
+				highestRankedProduct = buyableRankedProduct.product
 
 				log.Printf("Found new top product! %v ranked at %d\n", highestRankedProduct.Urls.Url, highestRank)
 			}
@@ -179,8 +234,43 @@ func findHighestRankedProduct(analyzedChannel <-chan *RankedProduct) *Product {
 	return highestRankedProduct
 }
 
-func buyProduct(product *Product) {
-	fmt.Printf("I AM GONNA BUY %v\n", product.Urls.Url)
+func buyProducts(products []*Product) {
+	var args []string
+	for _, product := range products {
+		args = append(args, product.Urls.Url.String())
+	}
+
+	cmd := BuildCasperScriptCommand("buyer/casperbuyer.js", args)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		log.Println("Unable to buy products :(")
+		log.Fatal(err)
+	}
+}
+
+func BuildCasperScriptCommand(script string, args []string) *exec.Cmd {
+	phantomPath := "buyer/phantomjs/bin"
+	if !strings.Contains(os.Getenv("PATH"), phantomPath) {
+		path := fmt.Sprintf("%s:%s", os.Getenv("PATH"), phantomPath)
+		os.Setenv("PATH", path)
+	}
+	casperPath := "buyer/casperjs/bin"
+	if !strings.Contains(os.Getenv("PATH"), casperPath) {
+		path := fmt.Sprintf("%s:%s", os.Getenv("PATH"), casperPath)
+		os.Setenv("PATH", path)
+	}
+
+	var realArgs []string;
+	realArgs = append(realArgs, "casperjs");
+	realArgs = append(realArgs, script);
+	realArgs = append(realArgs, args...);
+
+	cmd := exec.Command("casperjs");
+	cmd.Args = realArgs
+
+	return cmd
 }
 
 func cleanUp(products []*Product) {

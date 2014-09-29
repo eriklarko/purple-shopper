@@ -1,13 +1,10 @@
-// TODO: Don't have separate steps, just look for things like "Continue", "Proceed", "Place" etc and just press whatever's there.
-
 var stepNum = 0;
-var captureAllSteps = true;
-	
+var captureAllSteps = false;
+
 var fs = require('fs');
 var utils = require("utils");
 var casper = require('casper').create({
 	onStepComplete: function() {
-		this.echo("Finished step " + stepNum + ". Title: " + this.getTitle());
 		if (captureAllSteps) {
 			this.capture("images/" + stepNum + '.png');
 		}
@@ -42,47 +39,33 @@ function getLoginInfo() {
 	return toReturn
 }
 
-function addProductToCart(a) {
-	this.echo("Adding something to the cart." + a.url);
-	this.click("#add-to-cart-button");
+function doesShip() {
+	// This item ships to Gothenburg, Sweden.
+	// This item does not ship to Gothenburg, Sweden.
+
+	var re = new RegExp("This item ships to");
+	html = casper.getHTML();
+	return re.test(html);
 }
 
-function proceedToCheckout() {
-	this.capture("images/a-before-proceedtocheckout.png");
-	this.clickLabel("Proceed to checkout");
+function needsMoreInput() {
+	html = casper.getHTML();
+	var re = new RegExp("To buy, select");
+	return re.test(html);
 }
 
-function selectShippingAddress() {
-	this.capture("images/b-before-selectshippingaddress.png");
-	// TODO: Needs to be more generic..
-	this.click(".ship-to-this-address > span:nth-child(1) > a:nth-child(1)");
-}
+function seeIfProductCanBeBought() {
+	var ships = doesShip();
+	var doesNeedMoreInput = needsMoreInput();
 
-function selectShippingMethod() {
-	this.capture("images/c-before-selectshippingmethod.png");
-	// TODO: Needs to be more generic..
-	this.click("div.save-sosp-button-box:nth-child(2) > div:nth-child(1) > span:nth-child(1) > span:nth-child(1) > input:nth-child(1)");
-}
-
-function selectPaymentMethod() {
-	this.capture("images/d-before-selectpayment.png");
-	//this.click("input[value=\"EUR\"]");
-	this.click("#continue-top");
-}
-
-function placeOrder() {
-	this.capture("images/e-before-placeorder.png");
-	this.click(".place-your-order-button");
-}
-
-function logBoughtProducts() {
-	this.echo("Logging all products bought");
-
-	var toLog = "";
-	for (var i = 0; i < productUrls.length; i++) {
-		toLog += productUrls[i] + "\n";
+	var response;
+	if (!ships || doesNeedMoreInput) {
+		response = 1;
+	} else {
+		response = 0;
 	}
-	fs.write("../bought-products.txt", toLog, 'w');
+
+	this.echo(this.getCurrentUrl() + ";" + response);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -92,17 +75,10 @@ var loginInfo = getLoginInfo();
 
 casper.start(amazonLoginPage);
 casper.thenEvaluate(login, loginInfo.username, loginInfo.password);
-// TODO: Clear shopping cart
-for (var i = 0; i < productUrls.length; i++) {
-    casper.thenOpen(productUrls[i], addProductToCart);
-}
 
-casper.then(proceedToCheckout);
-casper.then(selectShippingAddress);
-casper.then(selectShippingMethod);
-casper.then(selectPaymentMethod);
-casper.waitForSelector(".place-your-order-button");
-casper.then(placeOrder);
-casper.then(logBoughtProducts);
+for (var i = 0; i < productUrls.length; i++) {
+	casper.thenOpen(productUrls[i]);
+	casper.then(seeIfProductCanBeBought);
+}
 
 casper.run();
