@@ -24,7 +24,7 @@ type RankedProduct struct {
 	rank int
 }
 
-type Ranker func (*Product, chan<- *RankedProduct) bool
+type Ranker func (*Product, chan<- *RankedProduct)
 
 var boughtProducts []string = nil
 
@@ -101,7 +101,7 @@ func downloadProductImage(urls *ProductUrls, toDownloadChannel chan<- *ProductUr
 		toAnalyzeChannel <- product
 	} else {
 		log.Printf("Unable to download image: %v\n", error)
-		toDownloadChannel <- urls
+		//toDownloadChannel <- urls
 	}
 }
 
@@ -141,23 +141,16 @@ func getImageName(url *url.URL) string {
 	return fmt.Sprintf("%x.%s", h.Sum(nil), fileEnding)
 }
 
-func rankProducts(ranker Ranker, toAnalyzeChannel chan *Product, analyzedChannel chan<- *RankedProduct) {
+func rankProducts(ranker Ranker, toAnalyzeChannel <-chan *Product, analyzedChannel chan<- *RankedProduct) {
 	select {
 	case toAnalyze := <-toAnalyzeChannel:
 		if toAnalyze == nil {
 			analyzedChannel <- nil
 			log.Println("Finised ranking all products")
 		} else {
-			go goRanker(toAnalyze, ranker, toAnalyzeChannel, analyzedChannel)
+			go ranker(toAnalyze, analyzedChannel)
 			rankProducts(ranker, toAnalyzeChannel, analyzedChannel)
 		}
-	}
-}
-
-func goRanker(toAnalyze *Product, ranker Ranker, toAnalyzeChannel chan<- *Product, analyzedChannel chan<- *RankedProduct) {
-	successfullyRanked := ranker(toAnalyze, analyzedChannel)
-	if !successfullyRanked {
-		toAnalyzeChannel <- toAnalyze
 	}
 }
 

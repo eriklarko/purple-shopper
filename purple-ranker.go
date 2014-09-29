@@ -20,14 +20,12 @@ var percentageOfPixelsPerCluster float64 = 0.35
 var config Config = Config {5, 1000000, Euclidean, GetPointFromLargestVarianceCluster}
 var rankLogFile string = fmt.Sprintf("ranks-%s.txt", time.Now().Format("2006-01-02 15:04"))
 
-func RankProductBasedOnAmountOfPurpleInImage(product *Product, c chan<- *RankedProduct) bool {
+func RankProductBasedOnAmountOfPurpleInImage(product *Product, c chan<- *RankedProduct) {
 	imageFile, error := os.Open(product.Image)
 	defer cleanUpFile(imageFile)
 
 	if error != nil {
 		log.Printf("Unable to find rank for %v. %v\n", product.Urls.Url, error)
-		// TODO: Readd the product to the channel
-		return false
 	}
 
 	rank, error := findAmountOfPurpleInImage(imageFile)
@@ -40,8 +38,6 @@ func RankProductBasedOnAmountOfPurpleInImage(product *Product, c chan<- *RankedP
 	} else if !strings.Contains(error.Error(), "few datapoints") {
 		log.Printf("Unable to find rank for %v. %v\n", product.Urls.Url, error)
 	}
-
-	return true
 }
 
 func cleanUpFile(file *os.File) {
