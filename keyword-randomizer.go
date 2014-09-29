@@ -20,10 +20,10 @@ func generateRandomSearchString() string {
 }
 
 func setupWordsDatabase() {
-	lines, err := ReadLines("CommonWords.txt")
-	if err != nil {
+	lines, error := ReadLines("CommonWords.txt")
+	if error != nil {
 		log.Println("Unable to open word database")
-		log.Fatal(err)
+		log.Fatal(error)
 	}
 
 	words = lines
@@ -32,9 +32,9 @@ func setupWordsDatabase() {
 // readLines reads a whole file into memory
 // and returns a slice of its lines.
 func ReadLines(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
+	file, error := os.Open(path)
+	if error != nil {
+		return nil, error
 	}
 	defer file.Close()
 

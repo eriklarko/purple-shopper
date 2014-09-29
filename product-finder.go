@@ -33,6 +33,7 @@ func findProductsOnRandomSearchPage(lowPrice, highPrice float64, c chan<- *Produ
 
 		url := fmt.Sprintf("%s&page=%d", baseUrl, page)
 		numberOfNewProducts := findProductsOnSearchPageUrl(url, c)
+		log.Printf("Found %d products on %s\n", numberOfNewProducts, url)
 		shouldContinue = numberOfNewProducts >= 10
 
 		numberOfProductsFound += numberOfNewProducts
@@ -83,7 +84,8 @@ func getRandomCategory() string {
 func findProductsOnSearchPageUrl(url string, c chan<- *ProductUrls) int {
 	doc, error := goquery.NewDocument(url)
 	if error != nil {
-		log.Fatal(error)
+		log.Printf("Unable to build goquery document from url %s: %v\n", url, error)
+		return 0
 	}
 
 	return findProductsOnSearchPage(doc, c)

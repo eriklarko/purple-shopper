@@ -10,6 +10,8 @@ import (
 	"time"
 	"os/exec"
 	"fmt"
+	"crypto/sha1"
+	"io"
 )
 
 type Product struct {
@@ -22,21 +24,21 @@ type RankedProduct struct {
 	rank int
 }
 
-type Ranker func (*Product, chan<- *RankedProduct)
+type Ranker func (*Product, chan<- *RankedProduct) bool
 
 var boughtProducts []string = nil
 
 func main() {
 	start := time.Now()
-	log.Println("Starting concurrent Purple Shopper")
 	ranker := RankProductBasedOnAmountOfPurpleInImage
 
-	toDownloadChannel := make(chan *ProductUrls, 10000)
-	toAnalyzeChannel := make(chan *Product, 100)
+	toDownloadChannel := make(chan *ProductUrls, 200)
+	toAnalyzeChannel := make(chan *Product, 70)
 	analyzedChannel := make(chan *RankedProduct, 10000)
 	buyableChannel := make(chan *RankedProduct, 10000)
 
 	for {
+		log.Println("==================== SEARCHING FOR PURPLES ====================")
 		go findProductsOnRandomSearchPage(0, 100, toDownloadChannel)
 		go downloadImages(toDownloadChannel, toAnalyzeChannel)
 		go rankProducts(ranker, toAnalyzeChannel, analyzedChannel)
@@ -57,14 +59,14 @@ func main() {
 	log.Printf("Running time %s", elapsed)
 }
 
-func downloadImages(toDownloadChannel <-chan *ProductUrls, toAnalyzeChannel chan<- *Product) {
+func downloadImages(toDownloadChannel chan *ProductUrls, toAnalyzeChannel chan<- *Product) {
 	select {
 	case toDownload := <-toDownloadChannel:
 		if toDownload == nil {
 			toAnalyzeChannel <- nil
 			log.Println("Finished downloading images")
 		} else if !productBoughtBefore(toDownload){
-			go downloadProductImage(toDownload, toAnalyzeChannel)
+			go downloadProductImage(toDownload, toDownloadChannel, toAnalyzeChannel)
 			downloadImages(toDownloadChannel, toAnalyzeChannel)
 		}
 	}
@@ -76,7 +78,7 @@ func productBoughtBefore(urls *ProductUrls) bool {
 		if error == nil {
 			boughtProducts = lines
 		} else {
-			log.Fatal(error)
+			log.Fatalf("Unable to open bought products log: %v\n", error)
 		}
 	}
 
@@ -92,37 +94,38 @@ func stringInSlice(a string, list []string) bool {
 	return false
 }
 
-func downloadProductImage(urls *ProductUrls, toAnalyzeChannel chan<- *Product) {
+func downloadProductImage(urls *ProductUrls, toDownloadChannel chan<- *ProductUrls, toAnalyzeChannel chan<- *Product) {
 	imageFile, error := downloadImage(urls.ImageUrl)
 	if error == nil {
 		product := &Product{urls, imageFile}
 		toAnalyzeChannel <- product
 	} else {
-		log.Println(error)
+		log.Printf("Unable to download image: %v\n", error)
+		toDownloadChannel <- urls
 	}
 }
 
 func downloadImage(url *url.URL) (string, error) {
-	res, err := http.Get(url.String())
-	if err != nil {
-		return "", err
+	res, error := http.Get(url.String())
+	if error != nil {
+		return "", error
 	}
 
-	data, err := ioutil.ReadAll(res.Body)
+	data, error := ioutil.ReadAll(res.Body)
 	res.Body.Close()
-	if err != nil {
-		return "", err
+	if error != nil {
+		return "", error
 	}
 
-	file, err := os.Create("image_" + getImageName(url))
+	file, error := os.Create("image_" + getImageName(url))
 	defer file.Close()
-	if err != nil {
-		return "", err
+	if error != nil {
+		return "", error
 	}
 
-	_, err = file.Write(data)
-	if err != nil {
-		return "", err
+	_, error = file.Write(data)
+	if error != nil {
+		return "", error
 	}
 	file.Sync()
 	return file.Name(), nil
@@ -130,21 +133,31 @@ func downloadImage(url *url.URL) (string, error) {
 
 func getImageName(url *url.URL) string {
 	urlString := url.String()
-	slashIndex := strings.LastIndex(urlString, "/")
+	lastDotIndex := strings.LastIndex(urlString, "/")
+	fileEnding := urlString[lastDotIndex + 1:]
 
-	return urlString[slashIndex + 1:]
+	h := sha1.New()
+	io.WriteString(h, urlString)
+	return fmt.Sprintf("%x.%s", h.Sum(nil), fileEnding)
 }
 
-func rankProducts(ranker Ranker, toAnalyzeChannel <-chan *Product, analyzedChannel chan<- *RankedProduct) {
+func rankProducts(ranker Ranker, toAnalyzeChannel chan *Product, analyzedChannel chan<- *RankedProduct) {
 	select {
 	case toAnalyze := <-toAnalyzeChannel:
 		if toAnalyze == nil {
 			analyzedChannel <- nil
 			log.Println("Finised ranking all products")
 		} else {
-			go ranker(toAnalyze, analyzedChannel)
+			go goRanker(toAnalyze, ranker, toAnalyzeChannel, analyzedChannel)
 			rankProducts(ranker, toAnalyzeChannel, analyzedChannel)
 		}
+	}
+}
+
+func goRanker(toAnalyze *Product, ranker Ranker, toAnalyzeChannel chan<- *Product, analyzedChannel chan<- *RankedProduct) {
+	successfullyRanked := ranker(toAnalyze, analyzedChannel)
+	if !successfullyRanked {
+		toAnalyzeChannel <- toAnalyze
 	}
 }
 
@@ -167,6 +180,7 @@ func filterNonBuyableProducts(analyzedChannel <-chan *RankedProduct, buyableChan
 				log.Printf("Checking buyability of %d products\n", len(buffer))
 				numberOfBuyableProducts := putBuyableProductsOnChannel(buffer, buyableChannel)
 				log.Printf("Found a total of %d products\n", numberOfBuyableProducts)
+				buffer = buffer[:0]
 			}
 		}
 	}
@@ -180,10 +194,10 @@ func putBuyableProductsOnChannel(products []*RankedProduct, c chan<- *RankedProd
 		urlToProductMap[product.product.Urls.Url.String()] = product
 	}
 
-	cmd := BuildCasperScriptCommand("buyer/items-can-be-bought.js", urls)
-	rawOutput, err := cmd.Output()
-	if err != nil {
-		log.Printf("Failed to check %d products for buyability, %v\n", len(products), err)
+	cmd := buildCasperScriptCommand("buyer/items-can-be-bought.js", urls)
+	rawOutput, error := cmd.Output()
+	if error != nil {
+		log.Printf("Failed to check %d products for buyability, %v\n", len(products), error)
 	}
 
 	unprocessedOutput := string(rawOutput);
@@ -240,17 +254,17 @@ func buyProducts(products []*Product) {
 		args = append(args, product.Urls.Url.String())
 	}
 
-	cmd := BuildCasperScriptCommand("buyer/casperbuyer.js", args)
+	cmd := buildCasperScriptCommand("buyer/casperbuyer.js", args)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
+	error := cmd.Run()
+	if error != nil {
 		log.Println("Unable to buy products :(")
-		log.Fatal(err)
+		log.Fatal(error)
 	}
 }
 
-func BuildCasperScriptCommand(script string, args []string) *exec.Cmd {
+func buildCasperScriptCommand(script string, args []string) *exec.Cmd {
 	phantomPath := "buyer/phantomjs/bin"
 	if !strings.Contains(os.Getenv("PATH"), phantomPath) {
 		path := fmt.Sprintf("%s:%s", os.Getenv("PATH"), phantomPath)

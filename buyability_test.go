@@ -33,13 +33,13 @@ func TestOnlyPutBuyableProductsOnChannel(t *testing.T) {
 func toRankedProducts(urls ...string) []*RankedProduct {
 	var products []*RankedProduct;
 	for _, rawUrl := range urls {
-		url, err := url.Parse(rawUrl)
-		if err == nil {
+		url, error := url.Parse(rawUrl)
+		if error == nil {
 			urls := &ProductUrls{url, nil}
 			prod := &Product{urls, ""}
 			products = append(products, &RankedProduct{prod, 0})
 		} else {
-			log.Println(err)
+			log.Println(error)
 		}
 	}
 	return products

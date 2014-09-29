@@ -8,11 +8,11 @@ import (
 func ToProductUrls(urls ...string) []*ProductUrls {
 	var products []*ProductUrls;
 	for _, rawUrl := range urls {
-		url, err := url.Parse(rawUrl)
-		if err == nil {
+		url, error := url.Parse(rawUrl)
+		if error == nil {
 			products = append(products, &ProductUrls{url, nil})
 		} else {
-			log.Println(err)
+			log.Println(error)
 		}
 	}
 	return products

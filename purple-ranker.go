@@ -20,13 +20,14 @@ var percentageOfPixelsPerCluster float64 = 0.35
 var config Config = Config {5, 1000000, Euclidean, GetPointFromLargestVarianceCluster}
 var rankLogFile string = fmt.Sprintf("ranks-%s.txt", time.Now().Format("2006-01-02 15:04"))
 
-func RankProductBasedOnAmountOfPurpleInImage(product *Product, c chan<- *RankedProduct) {
+func RankProductBasedOnAmountOfPurpleInImage(product *Product, c chan<- *RankedProduct) bool {
 	imageFile, error := os.Open(product.Image)
 	defer cleanUpFile(imageFile)
 
 	if error != nil {
 		log.Printf("Unable to find rank for %v. %v\n", product.Urls.Url, error)
-		return
+		// TODO: Readd the product to the channel
+		return false
 	}
 
 	rank, error := findAmountOfPurpleInImage(imageFile)
@@ -39,6 +40,8 @@ func RankProductBasedOnAmountOfPurpleInImage(product *Product, c chan<- *RankedP
 	} else if !strings.Contains(error.Error(), "few datapoints") {
 		log.Printf("Unable to find rank for %v. %v\n", product.Urls.Url, error)
 	}
+
+	return true
 }
 
 func cleanUpFile(file *os.File) {
@@ -46,14 +49,14 @@ func cleanUpFile(file *os.File) {
 		log.Println("Tried to cleanup nil file")
 	} else {
 
-		err := os.Remove(file.Name())
-		if err != nil {
-			log.Printf("Unable to remove file %v: %v", file, err)
+		error := os.Remove(file.Name())
+		if error != nil {
+			log.Printf("Unable to remove file %v: %v", file, error)
 		}
 
-		err = file.Close()
-		if err != nil {
-			log.Printf("Unable to close file %v: %v", file, err)
+		error = file.Close()
+		if error != nil {
+			log.Printf("Unable to close file %v: %v", file, error)
 		}
 	}
 }
@@ -132,20 +135,20 @@ func pointToColor(point Point) color.RGBA {
 func logRankInfo(product *Product, rank int) {
 
 	var file *os.File;
-	var err error;
+	var error error;
 
-	if _, err := os.Stat(rankLogFile); err == nil {
-		file, err = os.OpenFile(rankLogFile, os.O_APPEND|os.O_WRONLY, 0600)
+	if _, error := os.Stat(rankLogFile); error== nil {
+		file, error = os.OpenFile(rankLogFile, os.O_APPEND|os.O_WRONLY, 0600)
 	} else {
-		file, err = os.Create(rankLogFile)
+		file, error = os.Create(rankLogFile)
 	}
 
 	defer file.Close()
-	if err != nil {
-		log.Printf("Unable to persist rank. %v\n", err)
+	if error != nil {
+		log.Printf("Unable to persist rank. %v\n", error)
 	}
-	_, err = file.WriteString(fmt.Sprintf("%v ranked at %d\n", product.Urls.Url, rank))
-	if err != nil {
-		log.Printf("Unable to persist rank. %v\n", err)
+	_, error = file.WriteString(fmt.Sprintf("%v ranked at %d\n", product.Urls.Url, rank))
+	if error != nil {
+		log.Printf("Unable to persist rank. %v\n", error)
 	}
 }
