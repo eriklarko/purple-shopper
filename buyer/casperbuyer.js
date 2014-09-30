@@ -1,19 +1,8 @@
 // TODO: Don't have separate steps, just look for things like "Continue", "Proceed", "Place" etc and just press whatever's there.
 
-var stepNum = 0;
-var captureAllSteps = true;
-	
 var fs = require('fs');
 var utils = require("utils");
-var casper = require('casper').create({
-	onStepComplete: function() {
-		this.echo("Finished step " + stepNum + ". Title: " + this.getTitle());
-		if (captureAllSteps) {
-			this.capture("images/" + stepNum + '.png');
-		}
-		stepNum++;
-	}
-});
+var casper = require('casper').create();
 casper.userAgent('Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)');
 
 ////////////////////////////////////////////////////////////////////////
@@ -27,9 +16,21 @@ var productUrls =  casper.cli.args;
 ////////////////////////////////////////////////////////////////////////
 
 function login(username, password) {
-	document.getElementById('ap_email').value = username;
-	document.getElementById('ap_password').value = password;
-	document.getElementById('ap_signin_form').submit();
+	this.capture("images/login-before.png");
+	fs.write("dumps/login-before.html", this.getHTML(), 'w');
+
+	this.thenEvaluate(function (username, password) {
+		// TODO: if auth-email exists, do this
+		document.getElementById('auth-email').value = username;
+		document.getElementById('auth-password').value = password;
+		document.forms["signIn"].submit();
+
+		// TODO: if ap_email exists, do this
+		/*document.getElementById('ap_email').value = username;
+		document.getElementById('ap_password').value = password;
+		document.getElementById('ap_signin_form').submit();*/
+	}, loginInfo.username, loginInfo.password);
+	this.capture("images/login-after.png");
 }
 
 function getLoginInfo() {
@@ -44,13 +45,13 @@ function getLoginInfo() {
 }
 
 function clearCart() {
-	this.capture("images/before clearing cart.png");
+	this.capture("images/clearing-cart-before.png");
 	try {
 		this.clickLabel("Delete");
 		this.thenOpen(this.getCurrentUrl(), clearCart);
 	} catch (err) {
 		this.echo("The cart is empty now");
-		this.capture("images/after clearing cart.png");
+		this.capture("images/clearing-cart-after.png");
 	}
 }
 
@@ -60,31 +61,31 @@ function addProductToCart(a) {
 }
 
 function proceedToCheckout() {
-	this.capture("images/a-before-proceedtocheckout.png");
+	this.capture("images/proceed-to-checkout-before.png");
 	this.clickLabel("Proceed to checkout");
 }
 
 function selectShippingAddress() {
-	this.capture("images/b-before-selectshippingaddress.png");
+	this.capture("images/select-shipping-address-before.png");
 	// TODO: Needs to be more generic..
 	this.click(".ship-to-this-address > span:nth-child(1) > a:nth-child(1)");
 }
 
 function selectShippingMethod() {
-	this.capture("images/c-before-selectshippingmethod.png");
+	this.capture("images/select-shipping-method-before.png");
 	// TODO: Needs to be more generic..
 	this.click("div.save-sosp-button-box:nth-child(2) > div:nth-child(1) > span:nth-child(1) > span:nth-child(1) > input:nth-child(1)");
 }
 
 function selectPaymentMethod() {
-	this.capture("images/d-before-selectpayment.png");
+	this.capture("images/select-payment-method-before.png");
 	//this.click("input[value=\"EUR\"]");
 	this.click("#continue-top");
 }
 
 function placeOrder() {
-	this.capture("images/e-before-placeorder.png");
-	this.click(".place-your-order-button");
+	this.capture("images/place-order-before.png");
+	//this.click(".place-your-order-button");
 }
 
 function logBoughtProducts() {
@@ -102,8 +103,7 @@ function logBoughtProducts() {
 
 var loginInfo = getLoginInfo();
 
-casper.start(amazonLoginPage);
-casper.thenEvaluate(login, loginInfo.username, loginInfo.password);
+casper.start(amazonLoginPage, login);
 casper.thenOpen(amazonCartUrl, clearCart);
 for (var i = 0; i < productUrls.length; i++) {
     casper.thenOpen(productUrls[i], addProductToCart);

@@ -83,6 +83,10 @@ func findAmountOfPurpleInImage(imageFile *os.File) (int, error) {
 }
 
 func fileToImage(file *os.File) (image.Image, error) {
+	if file == nil {
+		return nil, errors.New("Tried to decode nil image")
+	}
+	
 	if strings.HasSuffix(file.Name(), "jpg") || strings.HasSuffix(file.Name(), "jpeg") {
 		return jpeg.Decode(file)
 	} else if strings.HasSuffix(file.Name(), "png") {
