@@ -1,4 +1,6 @@
-package main
+package amazon
+
+// TODO: Rename
 
 import (
   "log"
@@ -10,15 +12,12 @@ import (
   "fmt"
 
   "github.com/PuerkitoBio/goquery"
+  "github.com/eriklarko/purple-shopper/purple-shopper/randomkeyword"
+  "github.com/eriklarko/purple-shopper/purple-shopper/products"
 )
 
-type ProductUrls struct {
-	Url *url.URL
-	ImageUrl *url.URL
-}
-
-func findProductsOnRandomSearchPage(lowPrice, highPrice float64, c chan<- *ProductUrls) {
-	keyword := generateRandomSearchString()
+func FindProducts(lowPrice, highPrice float64, toDownloadChannel chan<- *products.ProductUrls, filter func(*products.ProductUrls)bool) {
+	keyword := randomkeyword.GenerateRandomSearchString()
 	category := getRandomCategory()
 
 	baseUrl := fmt.Sprintf("http://www.amazon.com/s/search-alias%%3D%s&field-keywords=%s&low-price=%.2f&high-price=%.2f", category, keyword, lowPrice, highPrice)
@@ -32,7 +31,7 @@ func findProductsOnRandomSearchPage(lowPrice, highPrice float64, c chan<- *Produ
 		page = page + 1
 
 		url := fmt.Sprintf("%s&page=%d", baseUrl, page)
-		numberOfNewProducts := findProductsOnSearchPageUrl(url, c)
+		numberOfNewProducts := findProductsOnSearchPageUrl(url, toDownloadChannel, filter)
 		log.Printf("Found %d products on %s\n", numberOfNewProducts, url)
 		shouldContinue = numberOfNewProducts >= 10
 
@@ -44,7 +43,7 @@ func findProductsOnRandomSearchPage(lowPrice, highPrice float64, c chan<- *Produ
 	}
 
 	log.Printf("Found a total of %d products\n", numberOfProductsFound)
-	c <- nil
+	close(toDownloadChannel)
 }
 
 func getRandomCategory() string {
@@ -81,21 +80,21 @@ func getRandomCategory() string {
 	return strings.ToLower(categories[r.Intn(len(categories))])
 }
 
-func findProductsOnSearchPageUrl(url string, c chan<- *ProductUrls) int {
+func findProductsOnSearchPageUrl(url string, c chan<- *products.ProductUrls, filter func(*products.ProductUrls)bool) int {
 	doc, error := goquery.NewDocument(url)
 	if error != nil {
 		log.Printf("Unable to build goquery document from url %s: %v\n", url, error)
 		return 0
 	}
 
-	return findProductsOnSearchPage(doc, c)
+	return findProductsOnSearchPage(doc, c, filter)
 }
 
-func findProductsOnSearchPage(doc *goquery.Document, c chan<- *ProductUrls) int {
+func findProductsOnSearchPage(doc *goquery.Document, c chan<- *products.ProductUrls, filter func(*products.ProductUrls)bool) int {
 	numberOfProductsFound := 0
 	doc.Find(".productImage").Each(func (i int, image *goquery.Selection) {
 		product, error := extractProduct(image);
-		if error == nil {
+		if error == nil && filter(&product) {
 			numberOfProductsFound++
 			c <- &product
 		} else {
@@ -106,19 +105,19 @@ func findProductsOnSearchPage(doc *goquery.Document, c chan<- *ProductUrls) int 
 	return numberOfProductsFound
 }
 
-func extractProduct(s *goquery.Selection) (ProductUrls, error) {
+func extractProduct(s *goquery.Selection) (products.ProductUrls, error) {
 	parentWithLink := findParentWithHref(s)
 	if parentWithLink == nil {
-		return ProductUrls{}, errors.New("No parent with href attribute found")
+		return products.ProductUrls{}, errors.New("No parent with href attribute found")
 	}
 
 	imageUrl, imageUrlError := attrToUrl(s, "src")
 	if imageUrlError == nil {
 		link,_ := attrToUrl(parentWithLink, "href")
-		return ProductUrls {link, imageUrl}, nil
+		return products.ProductUrls {link, imageUrl}, nil
 	}
 
-	return ProductUrls{}, imageUrlError
+	return products.ProductUrls{}, imageUrlError
 }
 
 func findParentWithHref(s *goquery.Selection) *goquery.Selection {

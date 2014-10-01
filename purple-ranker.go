@@ -12,15 +12,17 @@ import (
 	"log"
 	"fmt"
 	"time"
+	"github.com/eriklarko/purple-shopper/purple-shopper/products"
+	"github.com/eriklarko/purple-shopper/purple-shopper/coloralgorithms"
 )
 
 var purple color.RGBA = color.RGBA{0x80, 0x00, 0x80, 0xFF}
 var rankThreshold int = 370
 var percentageOfPixelsPerCluster float64 = 0.35
-var config Config = Config {5, 1000000, Euclidean, GetPointFromLargestVarianceCluster}
-var rankLogFile string = fmt.Sprintf("ranks-%s.txt", time.Now().Format("2006-01-02 15:04"))
+var config coloralgorithms.Config = coloralgorithms.Config {5, 1000000, coloralgorithms.Euclidean, coloralgorithms.GetPointFromLargestVarianceCluster}
+var rankLogFile string = fmt.Sprintf("ranks/ranks-%s.txt", time.Now().Format("2006-01-02 15:04"))
 
-func RankProductBasedOnAmountOfPurpleInImage(product *Product, c chan<- *RankedProduct) {
+func RankProductBasedOnAmountOfPurpleInImage(product *products.Product) *products.RankedProduct {
 	imageFile, error := os.Open(product.Image)
 	defer cleanUpFile(imageFile)
 
@@ -30,14 +32,17 @@ func RankProductBasedOnAmountOfPurpleInImage(product *Product, c chan<- *RankedP
 
 	rank, error := findAmountOfPurpleInImage(imageFile)
 	if error == nil {
+		//log.Printf("%s ranked at %d\n", product.Urls.Url, rank)
 		logRankInfo(product, rank)
 
 		if rank >= rankThreshold {
-			c <- &RankedProduct{product, rank}
+			return &products.RankedProduct{product, rank}
 		}
 	} else if !strings.Contains(error.Error(), "few datapoints") {
 		log.Printf("Unable to find rank for %v. %v\n", product.Urls.Url, error)
 	}
+
+	return nil
 }
 
 func cleanUpFile(file *os.File) {
@@ -64,21 +69,21 @@ func findAmountOfPurpleInImage(imageFile *os.File) (int, error) {
 	}
 
 	points := pixelsToPoints(image)
-	dominantColors, error := FindClusters(config, points)
+	dominantColors, error := coloralgorithms.FindClusters(config, points)
 	if error != nil {
 		return 0, error
 	}
 
-	clusterQualities := CalculateClusterQuality(config, dominantColors)
-	index, _ := LaMaximum(clusterQualities, int(float64(len(points)) * percentageOfPixelsPerCluster))
+	clusterQualities := coloralgorithms.CalculateClusterQuality(config, dominantColors)
+	index, _ := coloralgorithms.LaMaximum(clusterQualities, int(float64(len(points)) * percentageOfPixelsPerCluster))
 	if index < 0 {
 		return -1, nil //errors.New("No cluster was large enough")
 	}
 	dominantColor := dominantColors[index]
-	distanceToPurple := DistanceBetweenColors(pointToColor(*dominantColor.center), purple)
+	distanceToPurple := coloralgorithms.DistanceBetweenColors(pointToColor(*dominantColor.Center), purple)
 
 	// The distance should be as small as possible, but the rank should be as high as possible
-	rank := int(MAX_DISTANCE - distanceToPurple)
+	rank := int(coloralgorithms.MAX_DISTANCE - distanceToPurple)
 	return rank, nil
 }
 
@@ -96,8 +101,8 @@ func fileToImage(file *os.File) (image.Image, error) {
 	return nil, errors.New("I don't know the format of " + file.Name())
 }
 
-func pixelsToPoints(image image.Image) []*Point {
-	var colors []*Point
+func pixelsToPoints(image image.Image) []*coloralgorithms.Point {
+	var colors []*coloralgorithms.Point
 
 	b := image.Bounds()
 	for y := b.Min.Y; y < b.Max.Y; y++ {
@@ -110,7 +115,7 @@ func pixelsToPoints(image image.Image) []*Point {
 				continue
 			}
 
-			point := Point{
+			point := coloralgorithms.Point{
 				float64(r8),
 				float64(g8),
 				float64(b8),
@@ -122,7 +127,7 @@ func pixelsToPoints(image image.Image) []*Point {
 	return colors
 }
 
-func pointToColor(point Point) color.RGBA {
+func pointToColor(point coloralgorithms.Point) color.RGBA {
 	color := color.RGBA{
 		uint8(point[0]),
 		uint8(point[1]),
@@ -132,7 +137,7 @@ func pointToColor(point Point) color.RGBA {
 	return color
 }
 
-func logRankInfo(product *Product, rank int) {
+func logRankInfo(product *products.Product, rank int) {
 
 	var file *os.File;
 	var error error;

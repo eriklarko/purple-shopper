@@ -6,7 +6,7 @@ var utils = require("utils");
 var casper = require('casper').create({
 	onStepComplete: function() {
 		if (captureAllSteps) {
-			this.capture("images/" + stepNum + '.png');
+			this.capture("amazon/images/" + stepNum + '.png');
 		}
 		stepNum++;
 	}
@@ -23,13 +23,19 @@ var productUrls =  casper.cli.args;
 ////////////////////////////////////////////////////////////////////////
 
 function login(username, password) {
-	document.getElementById('ap_email').value = username;
-	document.getElementById('ap_password').value = password;
-	document.getElementById('ap_signin_form').submit();
+    // TODO: if auth-email exists, do this
+    document.getElementById('auth-email').value = username;
+    document.getElementById('auth-password').value = password;
+    document.forms["signIn"].submit();
+
+    // TODO: if ap_email exists, do this
+    /*document.getElementById('ap_email').value = username;
+    document.getElementById('ap_password').value = password;
+    document.getElementById('ap_signin_form').submit();*/
 }
 
 function getLoginInfo() {
-	var file_h = fs.open('buyer/amazon-login-info.txt', 'r');
+	var file_h = fs.open('amazon/buyer/amazon-login-info.txt', 'r');
 	var toReturn = {
 		username: file_h.readLine(),
 		password: file_h.readLine()

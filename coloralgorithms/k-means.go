@@ -1,4 +1,4 @@
-package main
+package coloralgorithms
 
 /**
 	Shamelessly stolen from Apache commons math
@@ -19,8 +19,8 @@ type Cluster []*Point
 
 // A holder for a cluster and its center
 type CentroidCluster struct {
-	center *Point
-	points *Cluster
+	Center *Point
+	Points *Cluster
 }
 
 // function used to calculate the distance between two points
@@ -44,8 +44,8 @@ func GetPointFromLargestVarianceCluster(config Config, clusters []*CentroidClust
 	maxVariance := 0.0
 	var selectedCluster *CentroidCluster = nil
 	for _, cluster := range clusters {
-		if len(*cluster.points) > 0 {
-			variance := PopulationVariance(calculateDistances(config, cluster.points, cluster.center))
+		if len(*cluster.Points) > 0 {
+			variance := PopulationVariance(calculateDistances(config, cluster.Points, cluster.Center))
 			if variance > maxVariance {
 				maxVariance = variance
 				selectedCluster = cluster
@@ -55,15 +55,15 @@ func GetPointFromLargestVarianceCluster(config Config, clusters []*CentroidClust
 
 	if selectedCluster == nil {
 		for _, cluster := range clusters {
-			if len(*cluster.points) > 0 {
+			if len(*cluster.Points) > 0 {
 				selectedCluster = cluster
 				break
 			}
 		}
 	}
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	randomIndex := r.Intn(len(*selectedCluster.points))
-	selectedPoint := (*selectedCluster.points)[randomIndex]
+	randomIndex := r.Intn(len(*selectedCluster.Points))
+	selectedPoint := (*selectedCluster.Points)[randomIndex]
 	return selectedPoint
 }
 
@@ -71,23 +71,23 @@ func calculateDistances(config Config, cluster *Cluster, point *Point) []float64
 	var distances []float64
 	for _, pointA := range *cluster {
 		// TODO: Handle error
-		distance, _ := config.measure(pointA, point)
+		distance, _ := config.Measure(pointA, point)
 		distances = append(distances, distance)
 	}
 	return distances
 }
 
 type Config struct {
-	k int /* number of clusters */
-	maxIterations int32 /* a negative value means no max */
-    measure DistanceMeasure
-	emptyStrategy EmptyClusterStrategy
+	K int /* number of clusters */
+	MaxIterations int32 /* a negative value means no max */
+    Measure DistanceMeasure
+	EmptyStrategy EmptyClusterStrategy
 }
 
 var DEFAULT_CONFIG Config = Config {-1, math.MaxInt32, Euclidean, GetPointFromLargestVarianceCluster}
 
 func FindClusters(config Config, points []*Point) ([]*CentroidCluster, error) {
-	if len(points) < config.k {
+	if len(points) < config.K {
 		return nil, errors.New("Too few datapoints")
 	}
 
@@ -98,7 +98,7 @@ func FindClusters(config Config, points []*Point) ([]*CentroidCluster, error) {
 	}
 	assignPointsToClusters(config, clusters, points, assignments)
 
-	var maxIterations int32 = config.maxIterations
+	var maxIterations int32 = config.MaxIterations
 	for i := int32(0); i < maxIterations; i++ {
 
 		// Update cluster centers
@@ -106,11 +106,11 @@ func FindClusters(config Config, points []*Point) ([]*CentroidCluster, error) {
 		var newClusters []*CentroidCluster
 		for _, cluster := range clusters {
 			var newCenter *Point
-			if len(*cluster.points) == 0 {
+			if len(*cluster.Points) == 0 {
 				emptyCluster = true
-				newCenter = config.emptyStrategy(config, clusters)
+				newCenter = config.EmptyStrategy(config, clusters)
 			} else {
-				newCenter = centroidOf(cluster.points, cluster.center, len(*cluster.center))
+				newCenter = centroidOf(cluster.Points, cluster.Center, len(*cluster.Center))
 			}
 
 			newClusters = append(newClusters, &CentroidCluster{newCenter, &Cluster{}})
@@ -149,12 +149,12 @@ func chooseInitialCenters(config Config, points []*Point) []*CentroidCluster {
 	for i := 0; i < numPoints; i++ {
 		if i != firstPointIndex {
 			// TODO: Handle error
-			d, _ := config.measure(firstPoint, points[i])
+			d, _ := config.Measure(firstPoint, points[i])
 			minDistSquared[i] = d * d
 		}
 	}
 
-	for len(resultSet) < config.k {
+	for len(resultSet) < config.K {
 		distSqSum := float64(0)
 		for i := 0; i < numPoints; i++ {
 			if !taken[i] {
@@ -189,11 +189,11 @@ func chooseInitialCenters(config Config, points []*Point) []*CentroidCluster {
 			resultSet = append(resultSet, &CentroidCluster{nextPoint, &Cluster{}})
 			taken[nextPointIndex] = true
 
-			if len(resultSet) < config.k {
+			if len(resultSet) < config.K {
 				for j := 0; j < numPoints; j++ {
 					if !taken[j] {
 						// TODO: Handle error
-						d, _ := config.measure(nextPoint, points[j])
+						d, _ := config.Measure(nextPoint, points[j])
 						dSqr := d * d
 						if dSqr < minDistSquared[j] {
 							minDistSquared[j] = dSqr
@@ -235,7 +235,7 @@ func assignPointsToClusters(config Config, clusters []*CentroidCluster, points [
 		if clusterIndex != assignments[pointIndex] {
 			assignedDifferently++
 		}
-		*clusters[clusterIndex].points = append(*clusters[clusterIndex].points, point)
+		*clusters[clusterIndex].Points = append(*clusters[clusterIndex].Points, point)
 		assignments[pointIndex] = clusterIndex
 	}
 
@@ -248,7 +248,7 @@ func getNearestCluster(config Config, clusters []*CentroidCluster, point *Point)
 
 	for clusterIndex, cluster := range clusters {
 		// TODO: Handle error
-		distance, _ := config.measure(point, cluster.center)
+		distance, _ := config.Measure(point, cluster.Center)
 		if distance < minDistance {
 			minDistance = distance
 			minCluster = clusterIndex
@@ -268,13 +268,13 @@ func CalculateClusterQuality(config Config, clusters []*CentroidCluster) []Quali
 	var qualities []Quality
 	for _, cluster := range clusters {
 		clusterQuality := 0.0
-		for _, point := range *cluster.points {
+		for _, point := range *cluster.Points {
 			// TODO: Handle error
-			distance,_ := config.measure(point, cluster.center)
+			distance,_ := config.Measure(point, cluster.Center)
 			clusterQuality += math.Sqrt(distance * distance)
 		}
-		clusterQuality /= float64(len(*cluster.points))
-		qualities = append(qualities, Quality{clusterQuality, len(*cluster.points)})
+		clusterQuality /= float64(len(*cluster.Points))
+		qualities = append(qualities, Quality{clusterQuality, len(*cluster.Points)})
 	}
 
 	return qualities

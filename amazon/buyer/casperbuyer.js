@@ -16,8 +16,8 @@ var productUrls =  casper.cli.args;
 ////////////////////////////////////////////////////////////////////////
 
 function login(username, password) {
-	this.capture("images/login-before.png");
-	fs.write("dumps/login-before.html", this.getHTML(), 'w');
+	this.capture("amazon/images/login-before.png");
+	fs.write("amazon/dumps/login-before.html", this.getHTML(), 'w');
 
 	this.thenEvaluate(function (username, password) {
 		// TODO: if auth-email exists, do this
@@ -30,11 +30,11 @@ function login(username, password) {
 		document.getElementById('ap_password').value = password;
 		document.getElementById('ap_signin_form').submit();*/
 	}, loginInfo.username, loginInfo.password);
-	this.capture("images/login-after.png");
+	this.capture("amazon/images/login-after.png");
 }
 
 function getLoginInfo() {
-	var file_h = fs.open('buyer/amazon-login-info.txt', 'r');
+	var file_h = fs.open('amazon/buyer/amazon-login-info.txt', 'r');
 	var toReturn = {
 		username: file_h.readLine(),
 		password: file_h.readLine()
@@ -45,13 +45,13 @@ function getLoginInfo() {
 }
 
 function clearCart() {
-	this.capture("images/clearing-cart-before.png");
+	this.capture("amazon/images/clearing-cart-before.png");
 	try {
 		this.clickLabel("Delete");
 		this.thenOpen(this.getCurrentUrl(), clearCart);
 	} catch (err) {
 		this.echo("The cart is empty now");
-		this.capture("images/clearing-cart-after.png");
+		this.capture("amazon/images/clearing-cart-after.png");
 	}
 }
 
@@ -61,30 +61,30 @@ function addProductToCart(a) {
 }
 
 function proceedToCheckout() {
-	this.capture("images/proceed-to-checkout-before.png");
+	this.capture("amazon/images/proceed-to-checkout-before.png");
 	this.clickLabel("Proceed to checkout");
 }
 
 function selectShippingAddress() {
-	this.capture("images/select-shipping-address-before.png");
+	this.capture("amazon/images/select-shipping-address-before.png");
 	// TODO: Needs to be more generic..
 	this.click(".ship-to-this-address > span:nth-child(1) > a:nth-child(1)");
 }
 
 function selectShippingMethod() {
-	this.capture("images/select-shipping-method-before.png");
+	this.capture("amazon/images/select-shipping-method-before.png");
 	// TODO: Needs to be more generic..
 	this.click("div.save-sosp-button-box:nth-child(2) > div:nth-child(1) > span:nth-child(1) > span:nth-child(1) > input:nth-child(1)");
 }
 
 function selectPaymentMethod() {
-	this.capture("images/select-payment-method-before.png");
+	this.capture("amazon/images/select-payment-method-before.png");
 	//this.click("input[value=\"EUR\"]");
 	this.click("#continue-top");
 }
 
 function placeOrder() {
-	this.capture("images/place-order-before.png");
+	this.capture("amazon/images/place-order-before.png");
 	//this.click(".place-your-order-button");
 }
 

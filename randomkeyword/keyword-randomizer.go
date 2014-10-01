@@ -1,4 +1,4 @@
-package main
+package randomkeyword
 
 import (
 	"os"
@@ -11,7 +11,7 @@ import (
 
 var words []string = nil
 
-func generateRandomSearchString() string {
+func GenerateRandomSearchString() string {
 	if words == nil {
 		setupWordsDatabase()
 	}
@@ -20,7 +20,7 @@ func generateRandomSearchString() string {
 }
 
 func setupWordsDatabase() {
-	lines, error := ReadLines("CommonWords.txt")
+	lines, error := ReadLines("randomkeyword/CommonWords.txt")
 	if error != nil {
 		log.Println("Unable to open word database")
 		log.Fatal(error)

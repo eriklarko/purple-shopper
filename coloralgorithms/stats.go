@@ -1,4 +1,4 @@
-package main
+package coloralgorithms
 
 /**
 	Shamelessly stolen from github.com/GaryBoone/GoStats
