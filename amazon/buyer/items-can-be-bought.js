@@ -1,5 +1,5 @@
 var stepNum = 0;
-var captureAllSteps = false;
+var captureAllSteps = true;
 
 var fs = require('fs');
 var utils = require("utils");
