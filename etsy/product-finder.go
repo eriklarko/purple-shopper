@@ -41,7 +41,6 @@ type Pagination struct {
 }
 
 var limit int = 100
-var apiKey *string = nil
 
 func FindProducts(lowPrice, highPrice float64, c chan<- *products.ProductUrls, filter func(*products.ProductUrls)bool) {
 	apiKey := getApiKey()
@@ -69,19 +68,6 @@ func FindProducts(lowPrice, highPrice float64, c chan<- *products.ProductUrls, f
 	close(c)
 }
 
-func getApiKey() string {
-	if apiKey == nil {
-		lines, error := randomkeyword.ReadLines("etsy/apikey")
-		if error != nil {
-			log.Fatalf("Unable to read Etsy API Key: %v\n", error)
-		}
-		if len(lines) == 0 {
-			log.Fatalf("Etsy API Key file was empty\n")
-		}
-		apiKey = &lines[0]
-	}
-	return *apiKey
-}
 
 func findProductsOnUrl(url string) ([]*products.ProductUrls, bool) {
 	log.Println("Requesting " + url)
@@ -114,7 +100,7 @@ func findProductsOnUrl(url string) ([]*products.ProductUrls, bool) {
 
 func buildBaseUrl(lowPrice, highPrice float64, keyword, apiKey string) string {
 	urlBuilder := bytes.NewBufferString("")
-	urlBuilder.WriteString("https://openapi.etsy.com/v2")
+	urlBuilder.WriteString(apiUrl)
 	urlBuilder.WriteString("/listings/active")
 	urlBuilder.WriteString("?fields=listing_id,title,price,url")
 	urlBuilder.WriteString("&min_price=%f")
