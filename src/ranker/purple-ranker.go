@@ -1,4 +1,4 @@
-package main
+package ranker
 
 import (
 	"image/color"
@@ -12,8 +12,8 @@ import (
 	"log"
 	"fmt"
 	"time"
-	"github.com/eriklarko/purple-shopper/purple-shopper/products"
-	"github.com/eriklarko/purple-shopper/purple-shopper/coloralgorithms"
+	"products"
+	"coloralgorithms"
 )
 
 var purple color.RGBA = color.RGBA{0x80, 0x00, 0x80, 0xFF}

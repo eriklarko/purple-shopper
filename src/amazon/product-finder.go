@@ -12,8 +12,8 @@ import (
   "fmt"
 
   "github.com/PuerkitoBio/goquery"
-  "github.com/eriklarko/purple-shopper/purple-shopper/randomkeyword"
-  "github.com/eriklarko/purple-shopper/purple-shopper/products"
+  "randomkeyword"
+  "products"
 )
 
 func FindProducts(lowPrice, highPrice float64, toDownloadChannel chan<- *products.ProductUrls, filter func(*products.ProductUrls)bool) {

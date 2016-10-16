@@ -3,7 +3,7 @@ package amazon
 import (
 	"testing"
 	"os"
-	"github.com/eriklarko/purple-shopper/purple-shopper/products"
+	"products"
 )
 
 func TestOnlyPutBuyableProductsOnChannel(t *testing.T) {

@@ -3,7 +3,7 @@ package amazon
 import (
 	"log"
 	"os"
-	"github.com/eriklarko/purple-shopper/purple-shopper/products"
+	"products"
 	"os/exec"
 	"strings"
 	"fmt"

@@ -4,12 +4,11 @@ import (
 	"log"
 	"os"
 	"time"
-	"github.com/eriklarko/purple-shopper/purple-shopper/randomkeyword"
-	"github.com/eriklarko/purple-shopper/purple-shopper/amazon"
-	"github.com/eriklarko/purple-shopper/purple-shopper/products"
-	"github.com/eriklarko/purple-shopper/purple-shopper/downloader"
-	//"github.com/eriklarko/purple-shopper/purple-shopper/etsy"
-	//"runtime"
+	"randomkeyword"
+	"amazon"
+	"products"
+	"downloader"
+	"ranker"
 )
 
 type Ranker func (*products.Product) *products.RankedProduct
@@ -18,8 +17,7 @@ var boughtProducts []string = nil
 
 func main() {
 	start := time.Now()
-	ranker := RankProductBasedOnAmountOfPurpleInImage
-	//runtime.GOMAXPROCS(runtime.NumCPU())
+	ranker := ranker.RankProductBasedOnAmountOfPurpleInImage
 
 	for {
 		log.Println("==================== SEARCHING FOR PURPLES ====================")
@@ -30,10 +28,6 @@ func main() {
 		buyableChannel := make(chan *products.RankedProduct, 10000)
 
 		go amazon.FindProducts(0, 100, toDownloadChannel, productBoughtBefore)
-		//go etsy.FindProducts(0, 100, toDownloadChannel, productBoughtBefore)
-		//toDownloadChannel <- products.ToOneProductUrls("http://www.amazon.com/Darice-LT80-1-Lights-2-Inch-Cluster/dp/B004FODNG0/ref=sr_1_56/182-5242956-9421230?s=hi&ie=UTF8&qid=1412105518&sr=1-56&keywords=artificial", "http://ecx.images-amazon.com/images/I/71yj93dxwML._SX522_.jpg")
-		//close(toDownloadChannel)
-
 		go downloadImages(toDownloadChannel, toAnalyzeChannel)
 		go rankProducts(ranker, toAnalyzeChannel, analyzedChannel)
 		go filterNonBuyableProducts(analyzedChannel, buyableChannel)

@@ -1,10 +1,10 @@
 package coloralgorithms
 
 import (
-    "image"
+	"image"
+	"math"
 	"image/color"
-    "math"
-    "log"
+	"log"
 )
 
 /*type RGB struct {

@@ -20,7 +20,7 @@ func GenerateRandomSearchString() string {
 }
 
 func setupWordsDatabase() {
-	lines, error := ReadLines("randomkeyword/CommonWords.txt")
+	lines, error := ReadLines("src/randomkeyword/CommonWords.txt")
 	if error != nil {
 		log.Println("Unable to open word database")
 		log.Fatal(error)
