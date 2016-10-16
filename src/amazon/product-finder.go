@@ -16,34 +16,39 @@ import (
   "products"
 )
 
-func FindProducts(lowPrice, highPrice float64, toDownloadChannel chan<- *products.ProductUrls, filter func(*products.ProductUrls)bool) {
-	keyword := randomkeyword.GenerateRandomSearchString()
-	category := getRandomCategory()
+func FindProducts(lowPrice, highPrice float64) <-chan *products.ProductUrls {
+	outchan := make(chan *products.ProductUrls)
+	go func() {
+		keyword := randomkeyword.GenerateRandomSearchString()
+		category := getRandomCategory()
 
-	baseUrl := fmt.Sprintf("http://www.amazon.com/s/search-alias%%3D%s&field-keywords=%s&low-price=%.2f&high-price=%.2f", category, keyword, lowPrice, highPrice)
-	log.Println("Doing an Amazon search for " + keyword + " in category " + category + ": " + baseUrl)
+		baseUrl := fmt.Sprintf("http://www.amazon.com/s/search-alias%%3D%s&field-keywords=%s&low-price=%.2f&high-price=%.2f", category, keyword, lowPrice, highPrice)
+		log.Println("Doing an Amazon search for " + keyword + " in category " + category + ": " + baseUrl)
 
-	page := 0
-	numberOfProductsFound := 0
-	lastLoggedNumberOfProducts := 0
-	shouldContinue := true
-	for shouldContinue {
-		page = page + 1
+		page := 0
+		numberOfProductsFound := 0
+		lastLoggedNumberOfProducts := 0
+		shouldContinue := true
+		for shouldContinue {
+			page = page + 1
 
-		url := fmt.Sprintf("%s&page=%d", baseUrl, page)
-		numberOfNewProducts := findProductsOnSearchPageUrl(url, toDownloadChannel, filter)
-		log.Printf("Found %d products on %s\n", numberOfNewProducts, url)
-		shouldContinue = numberOfNewProducts >= 10
+			url := fmt.Sprintf("%s&page=%d", baseUrl, page)
+			numberOfNewProducts := findProductsOnSearchPageUrl(url, outchan)
+			log.Printf("Found %d products on %s\n", numberOfNewProducts, url)
+			shouldContinue = numberOfNewProducts >= 10
 
-		numberOfProductsFound += numberOfNewProducts
-		if numberOfProductsFound - lastLoggedNumberOfProducts >= 150 {
-			log.Printf("Found %d products\n", numberOfProductsFound)
-			lastLoggedNumberOfProducts = numberOfProductsFound
+			numberOfProductsFound += numberOfNewProducts
+			if numberOfProductsFound - lastLoggedNumberOfProducts >= 150 {
+				log.Printf("Found %d products\n", numberOfProductsFound)
+				lastLoggedNumberOfProducts = numberOfProductsFound
+			}
 		}
-	}
 
-	log.Printf("Found a total of %d products\n", numberOfProductsFound)
-	close(toDownloadChannel)
+		log.Printf("Found a total of %d products\n", numberOfProductsFound)
+		close(outchan)
+	}()
+
+	return outchan;
 }
 
 func getRandomCategory() string {
@@ -80,21 +85,21 @@ func getRandomCategory() string {
 	return strings.ToLower(categories[r.Intn(len(categories))])
 }
 
-func findProductsOnSearchPageUrl(url string, c chan<- *products.ProductUrls, filter func(*products.ProductUrls)bool) int {
+func findProductsOnSearchPageUrl(url string, c chan<- *products.ProductUrls) int {
 	doc, error := goquery.NewDocument(url)
 	if error != nil {
 		log.Printf("Unable to build goquery document from url %s: %v\n", url, error)
 		return 0
 	}
 
-	return findProductsOnSearchPage(doc, c, filter)
+	return findProductsOnSearchPage(doc, c)
 }
 
-func findProductsOnSearchPage(doc *goquery.Document, c chan<- *products.ProductUrls, filter func(*products.ProductUrls)bool) int {
+func findProductsOnSearchPage(doc *goquery.Document, c chan<- *products.ProductUrls) int {
 	numberOfProductsFound := 0
 	doc.Find(".productImage").Each(func (i int, image *goquery.Selection) {
 		product, error := extractProduct(image);
-		if error == nil && filter(&product) {
+		if error == nil {
 			numberOfProductsFound++
 			c <- &product
 		} else {

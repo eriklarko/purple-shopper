@@ -15,6 +15,20 @@ type Ranker func (*products.Product) *products.RankedProduct
 
 var boughtProducts []string = nil
 
+
+func filter(c <-chan *products.ProductUrls, filter func(*products.ProductUrls)bool) <-chan *products.ProductUrls {
+	output := make(chan *products.ProductUrls);
+	go func() {
+		for candidate := range c {
+			if (filter(candidate)) {
+				output <- candidate;
+			}
+		}
+		close(output);
+	}()
+	return output;
+}
+
 func main() {
 	start := time.Now()
 	ranker := ranker.RankProductBasedOnAmountOfPurpleInImage
@@ -22,17 +36,14 @@ func main() {
 	for {
 		log.Println("==================== SEARCHING FOR PURPLES ====================")
 
-		toDownloadChannel := make(chan *products.ProductUrls, 200)
-		toAnalyzeChannel := make(chan *products.Product, 70)
-		analyzedChannel := make(chan *products.RankedProduct, 10000)
-		buyableChannel := make(chan *products.RankedProduct, 10000)
 
-		go amazon.FindProducts(0, 100, toDownloadChannel, productBoughtBefore)
-		go downloadImages(toDownloadChannel, toAnalyzeChannel)
-		go rankProducts(ranker, toAnalyzeChannel, analyzedChannel)
-		go filterNonBuyableProducts(analyzedChannel, buyableChannel)
+		productUrls := amazon.FindProducts(0, 10);
+		unboughtProductUrls := filter(productUrls, productBoughtBefore)
+		downloadedImages := downloadImages(unboughtProductUrls)
+		rankedProducts := rankProducts(ranker, downloadedImages)
+		buyableProducts := filterNonBuyableProducts(rankedProducts)
 
-		highestRankedProduct := findHighestRankedProduct(buyableChannel)
+		highestRankedProduct := findHighestRankedProduct(buyableProducts)
 		if highestRankedProduct == nil {
 			log.Println("Did not find a good enough product :(")
 		} else {
@@ -46,21 +57,24 @@ func main() {
 	log.Printf("Running time %s", elapsed)
 }
 
-func downloadImages(toDownloadChannel chan *products.ProductUrls, toAnalyzeChannel chan<- *products.Product) {
-	for toDownload := range toDownloadChannel {
-		//log.Printf("Going to download %s\n", toDownload.ImageUrl)
-		imageFile, error := downloader.DownloadImage(toDownload.ImageUrl)
-		if error == nil {
-			//log.Printf("Downloaded image %s to %s\n", urls.ImageUrl, imageFile)
-			product := &products.Product{toDownload, imageFile}
-			toAnalyzeChannel <- product
-		} else {
-			log.Printf("Unable to download image: %v\n", error)
+func downloadImages(toDownloadChannel <-chan *products.ProductUrls) <-chan *products.Product {
+	outchan := make(chan *products.Product)
+	go func() {
+		for toDownload := range toDownloadChannel {
+			//log.Printf("Going to download %s\n", toDownload.ImageUrl)
+			imageFile, error := downloader.DownloadImage(toDownload.ImageUrl)
+			if error == nil {
+				//log.Printf("Downloaded image %s to %s\n", urls.ImageUrl, imageFile)
+				product := &products.Product{toDownload, imageFile}
+				outchan <- product
+			} else {
+				log.Printf("Unable to download image: %v\n", error)
+			}
 		}
-	}
-
-	close(toAnalyzeChannel)
-	log.Println("Finished downloading images")
+		close(outchan)
+		log.Println("Finished downloading images")
+	}()
+	return outchan;
 }
 
 func productBoughtBefore(urls *products.ProductUrls) bool {
@@ -85,43 +99,52 @@ func stringInSlice(a string, list []string) bool {
 	return false
 }
 
-func rankProducts(ranker Ranker, toAnalyzeChannel <-chan *products.Product, analyzedChannel chan<- *products.RankedProduct) {
-	for toAnalyze := range toAnalyzeChannel {
-		rankedProduct := ranker(toAnalyze)
-		//log.Printf("Ranking %s got me %v \n", toAnalyze.Urls.Url, rankedProduct)
-		if rankedProduct != nil {
-			log.Printf("Found a purple product! %s\n", rankedProduct.Product.Urls.Url)
-			analyzedChannel <- rankedProduct
+func rankProducts(ranker Ranker, toAnalyzeChannel <-chan *products.Product) <-chan *products.RankedProduct {
+	outchan := make(chan *products.RankedProduct)
+	go func() {
+		for toAnalyze := range toAnalyzeChannel {
+			rankedProduct := ranker(toAnalyze)
+			//log.Printf("Ranking %s got me %v \n", toAnalyze.Urls.Url, rankedProduct)
+			if rankedProduct != nil {
+				log.Printf("Found a purple product! %s\n", rankedProduct.Product.Urls.Url)
+				outchan <- rankedProduct
+			}
 		}
-	}
 
-	close(analyzedChannel)
-	log.Println("Finised ranking all products")
+		close(outchan)
+		log.Println("Finised ranking all products")
+	}()
+	return outchan;
 }
 
-func filterNonBuyableProducts(analyzedChannel <-chan *products.RankedProduct, buyableChannel chan<- *products.RankedProduct) {
-	var buffer []*products.RankedProduct
+func filterNonBuyableProducts(analyzedChannel <-chan *products.RankedProduct) <-chan *products.RankedProduct {
+	outchan := make(chan *products.RankedProduct)
+	go func() {
+		var buffer []*products.RankedProduct
 
-	for toCheckForBuyability := range analyzedChannel {
-		log.Printf("Added %s to buyability queue\n", toCheckForBuyability.Product.Urls.Url)
-		buffer = append(buffer, toCheckForBuyability)
+		for toCheckForBuyability := range analyzedChannel {
+			log.Printf("Added %s to buyability queue\n", toCheckForBuyability.Product.Urls.Url)
+			buffer = append(buffer, toCheckForBuyability)
 
-		if len(buffer) >= 40 {
-			log.Printf("Checking buyability of %d products\n", len(buffer))
-			numberOfBuyableProducts := amazon.PutBuyableProductsOnChannel(buffer, buyableChannel)
-			log.Printf("Found %d buyable products\n", numberOfBuyableProducts)
-			buffer = buffer[:0]
+			if len(buffer) >= 40 {
+				log.Printf("Checking buyability of %d products\n", len(buffer))
+				numberOfBuyableProducts := amazon.PutBuyableProductsOnChannel(buffer, outchan)
+				log.Printf("Found %d buyable products\n", numberOfBuyableProducts)
+				buffer = buffer[:0]
+			}
 		}
-	}
 
-	if len(buffer) > 0 {
-		log.Printf("Checking buyability of %d products\n", len(buffer))
-		numberOfBuyableProducts := amazon.PutBuyableProductsOnChannel(buffer, buyableChannel)
-		log.Printf("Found %d buyable products\n", numberOfBuyableProducts)
-	}
+		if len(buffer) > 0 {
+			log.Printf("Checking buyability of %d products\n", len(buffer))
+			numberOfBuyableProducts := amazon.PutBuyableProductsOnChannel(buffer, outchan)
+			log.Printf("Found %d buyable products\n", numberOfBuyableProducts)
+		}
 
-	close(buyableChannel)
-	log.Println("Finised filtering non-buyable products")
+		close(outchan)
+		log.Println("Finised filtering non-buyable products")
+	}()
+
+	return outchan;
 }
 
 func findHighestRankedProduct(buyableChannel <-chan *products.RankedProduct) *products.Product {
