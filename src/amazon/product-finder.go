@@ -16,13 +16,13 @@ import (
   "products"
 )
 
-func FindProducts(lowPrice, highPrice float64) <-chan *products.ProductUrls {
+func FindProducts() <-chan *products.ProductUrls {
 	outchan := make(chan *products.ProductUrls)
 	go func() {
 		keyword := randomkeyword.GenerateRandomSearchString()
 		category := getRandomCategory()
 
-		baseUrl := fmt.Sprintf("http://www.amazon.com/s/search-alias%%3D%s&field-keywords=%s&low-price=%.2f&high-price=%.2f", category, keyword, lowPrice, highPrice)
+		baseUrl := "https://www.amazon.com/s/ref=nb_sb_noss_2?url=search-alias%3D" +category+ "&field-keywords=" + keyword
 		log.Println("Doing an Amazon search for " + keyword + " in category " + category + ": " + baseUrl)
 
 		page := 0
@@ -97,7 +97,7 @@ func findProductsOnSearchPageUrl(url string, c chan<- *products.ProductUrls) int
 
 func findProductsOnSearchPage(doc *goquery.Document, c chan<- *products.ProductUrls) int {
 	numberOfProductsFound := 0
-	doc.Find(".productImage").Each(func (i int, image *goquery.Selection) {
+	doc.Find(".s-access-image").Each(func (i int, image *goquery.Selection) {
 		product, error := extractProduct(image);
 		if error == nil {
 			numberOfProductsFound++
@@ -127,7 +127,7 @@ func extractProduct(s *goquery.Selection) (products.ProductUrls, error) {
 
 func findParentWithHref(s *goquery.Selection) *goquery.Selection {
 	// TODO: Do loop to find first parent with link
-	return s.Parent().Parent()
+	return s.Parent()
 }
 
 func attrToUrl(s *goquery.Selection, attr string) (*url.URL, error) {

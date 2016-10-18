@@ -37,7 +37,7 @@ func main() {
 		log.Println("==================== SEARCHING FOR PURPLES ====================")
 
 
-		productUrls := amazon.FindProducts(0, 10);
+		productUrls := amazon.FindProducts();
 		unboughtProductUrls := filter(productUrls, productBoughtBefore)
 		downloadedImages := downloadImages(unboughtProductUrls)
 		rankedProducts := rankProducts(ranker, downloadedImages)
@@ -52,6 +52,8 @@ func main() {
 			amazon.BuyProducts(products)
 			os.Exit(0)
 		}
+
+		os.Exit(0)
 	}
 	elapsed := time.Since(start)
 	log.Printf("Running time %s", elapsed)

@@ -150,10 +150,10 @@ func logRankInfo(product *products.Product, rank int) {
 
 	defer file.Close()
 	if error != nil {
-		log.Printf("Unable to persist rank. %v\n", error)
+		log.Printf("Unable to persist rank. Could not stat %s. %v\n", rankLogFile, error)
 	}
 	_, error = file.WriteString(fmt.Sprintf("%v ranked at %d\n", product.Urls.Url, rank))
 	if error != nil {
-		log.Printf("Unable to persist rank. %v\n", error)
+		log.Printf("Unable to persist rank. Could not write to %s. %v\n", rankLogFile, error)
 	}
 }
