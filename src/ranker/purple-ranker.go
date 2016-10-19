@@ -14,10 +14,11 @@ import (
 	"time"
 	"products"
 	"coloralgorithms"
+	"github.com/cenkalti/dominantcolor"
 )
 
 var purple color.RGBA = color.RGBA{0x80, 0x00, 0x80, 0xFF}
-var rankThreshold int = 370
+var rankThreshold int = 400
 var percentageOfPixelsPerCluster float64 = 0.35
 var config coloralgorithms.Config = coloralgorithms.Config {5, 1000000, coloralgorithms.Euclidean, coloralgorithms.GetPointFromLargestVarianceCluster}
 var rankLogFile string = fmt.Sprintf("ranks/ranks-%s.txt", time.Now().Format("2006-01-02 15:04"))
@@ -63,6 +64,18 @@ func cleanUpFile(file *os.File) {
 }
 
 func findAmountOfPurpleInImage(imageFile *os.File) (int, error) {
+	img, _, err := image.Decode(imageFile)
+	if err != nil {
+		return -1, err
+	}
+	dominantColor := dominantcolor.Find(img)
+	distanceToPurple := coloralgorithms.DistanceBetweenColors(dominantColor, purple)
+
+	// The distance should be as small as possible, but the rank should be as high as possible
+	rank := int(coloralgorithms.MAX_DISTANCE - distanceToPurple)
+	return rank, nil
+}
+func findAmountOfPurpleInImagee(imageFile *os.File) (int, error) {
 	image, error := fileToImage(imageFile)
 	if error != nil {
 		return 0, error
