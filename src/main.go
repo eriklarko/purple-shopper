@@ -12,7 +12,6 @@ import (
 )
 
 type Ranker func (*products.Product) *products.RankedProduct
-
 var boughtProducts []string = nil
 
 func main() {
@@ -32,8 +31,18 @@ func main() {
 		// Download the image referenced by the imageUrl above
 		downloadedImages := downloadImages(productUrls)
 
-		// Give the image a score based on how purple it is. Between 0 and 441 :)
-		rankedProducts := rankProducts(ranker.RankProductBasedOnAmountOfPurpleInImage, downloadedImages)
+		/* Give the image a score based on how purple it is. Between 0 and 441 :)
+		 * The object above is extended with the rank:
+		 *  {
+		 *      imageUrl: ...,
+		 *	productUrl: ...,
+		 *	rank: 410
+		 *  }
+		 */
+		rankedProducts := rankProducts(
+			ranker.RankProductBasedOnAmountOfPurpleInImage,
+			downloadedImages,
+		)
 
 		// Throw away any products that don't ship to Sweden
 		buyableProducts := filterNonBuyableProducts(rankedProducts)
