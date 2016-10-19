@@ -15,6 +15,64 @@ type Ranker func (*products.Product) *products.RankedProduct
 
 var boughtProducts []string = nil
 
+func main() {
+	start := time.Now()
+	for {
+		log.Println("==================== SEARCHING FOR PURPLES ====================")
+
+		/* Make a random search on amazon.com and read the image and product details urls from the html
+		 * e.g.
+                 *   {
+		 *	imageUrl: "https://images-na.ssl-images-amazon.com/images/I/5188yugyWZL._AC_US160_.jpg",
+		 *	productUrl: "https://www.amazon.com/Dealzip-Fashion-Octopus-Cthulhu-Knitting/dp/B00VFX2NTW/ref=sr_1_1?ie=UTF8&qid=1476899795&sr=8-1&keywords=random"
+		 *   }
+		 */
+		productUrls := amazon.FindProducts();
+
+		// Download the image referenced by the imageUrl above
+		downloadedImages := downloadImages(productUrls)
+
+		// Give the image a score based on how purple it is. Between 0 and 441 :)
+		rankedProducts := rankProducts(ranker.RankProductBasedOnAmountOfPurpleInImage, downloadedImages)
+
+		// Throw away any products that don't ship to Sweden
+		buyableProducts := filterNonBuyableProducts(rankedProducts)
+
+		// Throw away any products we've already bought
+		unboughtBuyableProducts := filter(buyableProducts, productHasBeenBoughtBefore)
+
+		// Find the unbought and buyable product with the highest purple-score
+		highestRankedProduct := findHighestRankedProduct(unboughtBuyableProducts)
+
+		if highestRankedProduct == nil {
+			log.Println("Did not find a good enough product :( Will try again!")
+		} else {
+			// Buy the product!
+			amazon.BuyProducts(highestRankedProduct)
+			os.Exit(0)
+		}
+	}
+	elapsed := time.Since(start)
+	log.Printf("Running time %s", elapsed)
+}
+
+func downloadImages(toDownloadChannel <-chan *products.ProductUrls) <-chan *products.Product {
+	outchan := make(chan *products.Product)
+	go func() {
+		for toDownload := range toDownloadChannel {
+			imageFile, error := downloader.DownloadImage(toDownload.ImageUrl)
+			if error == nil {
+				product := &products.Product{toDownload, imageFile}
+				outchan <- product
+			} else {
+				log.Printf("Unable to download image: %v\n", error)
+			}
+		}
+		close(outchan)
+		log.Println("Finished downloading images")
+	}()
+	return outchan;
+}
 
 func filter(c <-chan *products.ProductUrls, filter func(*products.ProductUrls)bool) <-chan *products.ProductUrls {
 	output := make(chan *products.ProductUrls);
@@ -29,57 +87,7 @@ func filter(c <-chan *products.ProductUrls, filter func(*products.ProductUrls)bo
 	return output;
 }
 
-func main() {
-	start := time.Now()
-	ranker := ranker.RankProductBasedOnAmountOfPurpleInImage
-
-	for {
-		log.Println("==================== SEARCHING FOR PURPLES ====================")
-
-
-		productUrls := amazon.FindProducts();
-		unboughtProductUrls := filter(productUrls, productBoughtBefore)
-		downloadedImages := downloadImages(unboughtProductUrls)
-		rankedProducts := rankProducts(ranker, downloadedImages)
-		buyableProducts := filterNonBuyableProducts(rankedProducts)
-
-		highestRankedProduct := findHighestRankedProduct(buyableProducts)
-		if highestRankedProduct == nil {
-			log.Println("Did not find a good enough product :(")
-		} else {
-			var products []*products.Product
-			products = append(products, highestRankedProduct)
-			amazon.BuyProducts(products)
-			os.Exit(0)
-		}
-
-		os.Exit(0)
-	}
-	elapsed := time.Since(start)
-	log.Printf("Running time %s", elapsed)
-}
-
-func downloadImages(toDownloadChannel <-chan *products.ProductUrls) <-chan *products.Product {
-	outchan := make(chan *products.Product)
-	go func() {
-		for toDownload := range toDownloadChannel {
-			//log.Printf("Going to download %s\n", toDownload.ImageUrl)
-			imageFile, error := downloader.DownloadImage(toDownload.ImageUrl)
-			if error == nil {
-				//log.Printf("Downloaded image %s to %s\n", urls.ImageUrl, imageFile)
-				product := &products.Product{toDownload, imageFile}
-				outchan <- product
-			} else {
-				log.Printf("Unable to download image: %v\n", error)
-			}
-		}
-		close(outchan)
-		log.Println("Finished downloading images")
-	}()
-	return outchan;
-}
-
-func productBoughtBefore(urls *products.ProductUrls) bool {
+func productHasBeenBoughtBefore(urls *products.ProductUrls) bool {
 	if boughtProducts == nil {
 		lines, error := randomkeyword.ReadLines("bought-products.txt")
 		if error == nil {
