@@ -68,6 +68,8 @@ func findAmountOfPurpleInImage(imageFile *os.File) (int, error) {
 	if err != nil {
 		return -1, err
 	}
+	img = turnGreyIntoWhite(img);
+	//logImage(img);
 	dominantColor := dominantcolor.Find(img)
 	distanceToPurple := coloralgorithms.DistanceBetweenColors(dominantColor, purple)
 
@@ -75,6 +77,43 @@ func findAmountOfPurpleInImage(imageFile *os.File) (int, error) {
 	rank := int(coloralgorithms.MAX_DISTANCE - distanceToPurple)
 	return rank, nil
 }
+
+func turnGreyIntoWhite(img image.Image) image.Image {
+	newImg := image.NewRGBA(img.Bounds());
+	size := img.Bounds().Max;
+	for x := 0; x < size.X; x++ {
+		for y := 0; y < size.Y; y++ {
+			col := img.At(x, y);
+			if (isGreyish(col)) {
+				newImg.Set(x, y, color.Transparent)
+			} else {
+				newImg.Set(x, y, col)
+			}
+		}
+	}
+	return newImg
+}
+func logImage(img image.Image) {
+	out, err := os.Create(fmt.Sprintf("./%d.png",time.Now().UnixNano()))
+	if err != nil {
+		fmt.Printf("Unable to create log image file, %v\n", err)
+	}
+
+	err = png.Encode(out, img)
+	if err != nil {
+		fmt.Printf("Unable to encode log image file, %v\n", err)
+	}
+}
+
+func isGreyish(col color.Color) bool {
+	greyThreshold := 70.0;
+
+	r32,g32,b32,_ := col.RGBA()
+	r8, g8, b8 := uint8(r32), uint8(g32), uint8(b32)
+
+	return math.Abs(float64(r8 - g8)) < greyThreshold && math.Abs(float64(r8 - b8)) < greyThreshold;
+}
+
 func findAmountOfPurpleInImagee(imageFile *os.File) (int, error) {
 	image, error := fileToImage(imageFile)
 	if error != nil {

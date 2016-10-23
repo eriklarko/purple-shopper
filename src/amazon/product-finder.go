@@ -14,6 +14,7 @@ import (
   "github.com/PuerkitoBio/goquery"
   "randomkeyword"
   "products"
+	"os"
 )
 
 func FindProducts() <-chan *products.ProductUrls {
@@ -35,9 +36,10 @@ func FindProducts() <-chan *products.ProductUrls {
 			url := fmt.Sprintf("%s&page=%d", baseUrl, page)
 			numberOfNewProducts := findProductsOnSearchPageUrl(url, outchan)
 			log.Printf("Found %d products on %s\n", numberOfNewProducts, url)
-			shouldContinue = numberOfNewProducts >= 10
 
 			numberOfProductsFound += numberOfNewProducts
+			shouldContinue = numberOfNewProducts >= 10 && numberOfProductsFound < 2000
+
 			if numberOfProductsFound - lastLoggedNumberOfProducts >= 150 {
 				log.Printf("Found %d products\n", numberOfProductsFound)
 				lastLoggedNumberOfProducts = numberOfProductsFound
@@ -96,6 +98,11 @@ func findProductsOnSearchPageUrl(url string, c chan<- *products.ProductUrls) int
 }
 
 func findProductsOnSearchPage(doc *goquery.Document, c chan<- *products.ProductUrls) int {
+	if (strings.Contains(doc.Text(), "Robot Check")) {
+		fmt.Println("We're being blocked by captcha :(")
+		os.Exit(2);
+	}
+
 	numberOfProductsFound := 0
 	doc.Find(".s-access-image").Each(func (i int, image *goquery.Selection) {
 		product, error := extractProduct(image);

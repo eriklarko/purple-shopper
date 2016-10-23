@@ -9,6 +9,9 @@ import (
 	"fmt"
 )
 
+func Buy(product *products.Product) {
+	fmt.Printf("Buying %s\n", product.Urls.Url);
+}
 func BuyProducts(products []*products.Product) {
 	var args []string
 	for _, product := range products {

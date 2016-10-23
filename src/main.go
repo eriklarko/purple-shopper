@@ -45,10 +45,10 @@ func main() {
 		)
 
 		// Throw away any products that don't ship to Sweden
-		buyableProducts := filterNonBuyableProducts(rankedProducts)
+		//buyableProducts := filterNonBuyableProducts(rankedProducts)
 
 		// Throw away any products we've already bought
-		unboughtBuyableProducts := filter(buyableProducts, productHasBeenBoughtBefore)
+		unboughtBuyableProducts := filter(rankedProducts, productHasBeenBoughtBefore)
 
 		// Find the unbought and buyable product with the highest purple-score
 		highestRankedProduct := findHighestRankedProduct(unboughtBuyableProducts)
@@ -57,7 +57,7 @@ func main() {
 			log.Println("Did not find a good enough product :( Will try again!")
 		} else {
 			// Buy the product!
-			amazon.BuyProducts(highestRankedProduct)
+			amazon.Buy(highestRankedProduct)
 			os.Exit(0)
 		}
 	}
@@ -83,8 +83,8 @@ func downloadImages(toDownloadChannel <-chan *products.ProductUrls) <-chan *prod
 	return outchan;
 }
 
-func filter(c <-chan *products.ProductUrls, filter func(*products.ProductUrls)bool) <-chan *products.ProductUrls {
-	output := make(chan *products.ProductUrls);
+func filter(c <-chan *products.RankedProduct, filter func(*products.RankedProduct)bool) <-chan *products.RankedProduct {
+	output := make(chan *products.RankedProduct);
 	go func() {
 		for candidate := range c {
 			if (filter(candidate)) {
@@ -96,7 +96,7 @@ func filter(c <-chan *products.ProductUrls, filter func(*products.ProductUrls)bo
 	return output;
 }
 
-func productHasBeenBoughtBefore(urls *products.ProductUrls) bool {
+func productHasBeenBoughtBefore(urls *products.RankedProduct) bool {
 	if boughtProducts == nil {
 		lines, error := randomkeyword.ReadLines("bought-products.txt")
 		if error == nil {
@@ -106,7 +106,7 @@ func productHasBeenBoughtBefore(urls *products.ProductUrls) bool {
 		}
 	}
 
-	return !stringInSlice(urls.Url.String(), boughtProducts);
+	return !stringInSlice(urls.Product.Urls.Url.String(), boughtProducts);
 }
 
 func stringInSlice(a string, list []string) bool {
